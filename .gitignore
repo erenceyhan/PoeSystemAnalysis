@@ -1,0 +1,13 @@
+.dotnet-home/
+**/bin/
+**/obj/
+
+!publish/
+!publish/win-x64/
+!publish/win-x64/**
+
+.vs/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
