@@ -25,7 +25,6 @@ public sealed class GlobalInputMonitor : IDisposable
 
     public event Action? StartRequested;
     public event Action? StopRequested;
-    public event Action? ExitRequested;
     public event Action? CaptureSourceRequested;
     public event Action? CaptureTargetRequested;
 
@@ -73,7 +72,7 @@ public sealed class GlobalInputMonitor : IDisposable
             }
             else if (key == NativeMethods.VK_ESCAPE)
             {
-                ExitRequested?.Invoke();
+                StopRequested?.Invoke();
             }
             else if (key == NativeMethods.VK_F6)
             {

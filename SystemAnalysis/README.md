@@ -9,7 +9,7 @@
 - Kullanici fareyi oynatirsa, tiklarsa veya klavyede tusa basarsa otomatik durur
 - Arayuzden birden fazla aranan mod ve zamanlama degerlerini girebilirsin
 - `F6` ile currency noktasi, `F7` ile ise istedigin kadar item noktasi ekleyebilirsin
-- `F8` ile baslat, `F9` ile durdur, `Esc` ile cik
+- `F8` ile baslat, `F9` ile durdur, `Esc` ile islemi durdur
 - `F8` ile baslayinca secilen log klasorunde tarih-saat adli bir `.txt` log dosyasi olusur
 - Her item icin kac sol tik atildigi ve ne kadar surdugu loglanir
 - Tum secili itemler bitince kisa bir uyari sesi calar
@@ -50,11 +50,11 @@ Kontrol icin ayri bir nokta secilmez. Program her itemde kontrolu dogrudan o ite
 
 - `F8`: baslat
 - `F9`: durdur
-- `Esc`: pencereyi kapat
+- `Esc`: aktif islemi durdur
 - `F6`: mevcut mouse konumunu `Currency Noktasi` olarak kaydet
 - `F7`: mevcut mouse konumunu item listesine yeni `Item Noktasi` olarak ekle
 
-Program calisirken sen fareyi hareket ettirirsen, tiklarsan veya klavyede bir tusa basarsan otomatik durur. Bu sayede islem devam ederken kontrolu geri alabilirsin.
+Program calisirken sen fareyi hareket ettirirsen, tiklarsan veya klavyede bir tusa basarsan otomatik durur. Bu sayede islem devam ederken kontrolu geri alabilirsin. Uygulamayi kapatmak icin `Kapat` butonunu veya pencerenin carpı butonunu kullanabilirsin.
 
 ## Loglama
 
@@ -93,6 +93,12 @@ dotnet build
 .\bin\Debug\net10.0-windows\SystemAnalysis.exe
 ```
 
+Istersen dogrudan su yolu da calistirabilirsin:
+
+```powershell
+& "C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Debug\net10.0-windows\SystemAnalysis.exe"
+```
+
 ## Exe Uretme
 
 ```powershell
@@ -104,8 +110,14 @@ Olusan exe:
 
 `bin\Release\net10.0-windows\win-x64\publish\SystemAnalysis.exe`
 
+Dogrudan calistirmak icin:
+
+```powershell
+& "C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Release\net10.0-windows\win-x64\publish\SystemAnalysis.exe"
+```
+
 ## Repo Duzeni
 
 - Kaynak kodlar `SystemAnalysis/` klasorundedir.
-- Stabil publish ciktisi repo kokundeki `publish/win-x64/` klasorune kopyalanabilir.
+- Guncel publish kopyasi repo kokundeki `publish/win-x64/` klasorunde de tutulur.
 - `bin/` ve `obj/` gibi build klasorleri git'e eklenmez.

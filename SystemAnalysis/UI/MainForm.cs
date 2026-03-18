@@ -389,9 +389,13 @@ public sealed class MainForm : Form
         _stopButton.Click += (_, _) => StopCurrentRun("Durdurma istendi.");
         actionsPanel.Controls.Add(_stopButton);
 
+        var closeButton = new Button { Text = "Kapat", AutoSize = true };
+        closeButton.Click += (_, _) => Close();
+        actionsPanel.Controls.Add(closeButton);
+
         var helpLabel = new Label
         {
-            Text = "F6 currency noktasini kaydeder. F7 her basista yeni item noktasi ekler. Esc kapatir; calisirken fare veya klavye hareketi otomatik durdurur.",
+            Text = "F6 currency noktasini kaydeder. F7 her basista yeni item noktasi ekler. Esc dahil fare veya klavye hareketi islemi durdurur.",
             AutoSize = true,
             Margin = new Padding(18, 8, 0, 0)
         };
@@ -465,7 +469,6 @@ public sealed class MainForm : Form
     {
         _monitor.StartRequested += () => InvokeOnUi(StartRun);
         _monitor.StopRequested += () => InvokeOnUi(() => StopCurrentRun("Durdurma istendi."));
-        _monitor.ExitRequested += () => InvokeOnUi(Close);
         _monitor.CaptureSourceRequested += () => InvokeOnUi(() => CapturePoint(PointKind.Source));
         _monitor.CaptureTargetRequested += () => InvokeOnUi(() => CapturePoint(PointKind.Target));
     }
