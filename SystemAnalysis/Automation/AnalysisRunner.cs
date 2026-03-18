@@ -215,9 +215,18 @@ public sealed class AnalysisRunner
 
         _totalStopwatch.Stop();
         var totalLeftClicks = _completedItems.Sum(item => item.LeftClicks);
+        Log("---- Ozet ----");
+
+        foreach (var item in _completedItems.OrderBy(item => item.Index))
+        {
+            var status = item.Completed ? "tamamlandi" : "yarida kesildi";
+            Log($"Item {item.Index}: {item.LeftClicks} currency | Sure: {FormatDuration(item.Stopwatch.Elapsed)} | Durum: {status}");
+        }
+
         Log($"Toplam item sayisi: {_completedItems.Count}");
+        Log($"Toplam currency harcamasi: {totalLeftClicks}");
         Log($"Toplam sol tik sayisi: {totalLeftClicks}");
-        Log($"Toplam sure: {FormatDuration(_totalStopwatch.Elapsed)}");
+        Log($"Toplam calisma suresi: {FormatDuration(_totalStopwatch.Elapsed)}");
         _summaryLogged = true;
     }
 
