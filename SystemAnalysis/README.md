@@ -1,39 +1,38 @@
 # SystemAnalysis
 
-Bu surum, kucuk bir arayuz uzerinden aradigin metni yazip craft akisina baslamana izin verir. Belirledigin noktalara normal hizda tiklar ve her tiklamadan sonra `Ctrl+C` ile item bilgisini panoya alip istedigin modun gelip gelmedigini kontrol eder.
+ Bu surum, kucuk bir arayuz uzerinden aradigin metni yazip birden fazla item noktasi uzerinde akisi sirayla calistirmana izin verir. Belirledigin noktalara normal hizda tiklar ve her tiklamadan sonra ayni item noktasinda `Ctrl+C` ile bilgiyi panoya alip istedigin modun gelip gelmedigini kontrol eder.
 
 ## Ozellikler
 
-- `single_craft`: currency noktasina sag tik, item noktasina sol tik, sonra kontrol
-- `hold_shift_spam`: `Shift` basili tutarak currency noktasina bir kez sag tik, sonra item noktasina tekrar tekrar sol tik
+- `hold_shift_spam`: secili her item icin currency noktasina bir kez sag tik, `Shift` basili tutarak ayni item noktasina tekrar tekrar sol tik
 - Her sol tiktan sonra kesin olarak kontrol yapar
 - Kullanici fareyi oynatirsa, tiklarsa veya klavyede tusa basarsa otomatik durur
 - Arayuzden birden fazla aranan mod ve zamanlama degerlerini girebilirsin
-- `F6`, `F7`, `F10` ile mevcut fare konumunu kaydedebilirsin
+- `F6` ile currency noktasi, `F7` ile ise istedigin kadar item noktasi ekleyebilirsin
 - `F8` ile baslat, `F9` ile durdur, `Esc` ile cik
 - `F8` ile baslayinca secilen log klasorunde tarih-saat adli bir `.txt` log dosyasi olusur
+- Her item icin kac sol tik atildigi ve ne kadar surdugu loglanir
+- Tum secili itemler bitince kisa bir uyari sesi calar
 
 ## Arayuz Mantigi
 
 - `Currency Noktasi`: basilacak currency
-- `Item Noktasi`: craft yapilan item
-- `Kontrol Noktasi`: cogu durumda yine ayni item noktasi
+- `Item Noktalari`: sirasiyla islenecek tum itemler
 
-Path of Exile benzeri kullanimda item yer degistirmez, sadece icerigi degisir. Bu nedenle cogu durumda `Item Noktasi` ile `Kontrol Noktasi` ayni koordinat olur.
+Kontrol icin ayri bir nokta secilmez. Program her itemde kontrolu dogrudan o item noktasinda yapar.
 
 ## Programin Calisma Mantigi
 
 - Aktif ve dolu olan `Aranan Mod` satirlarindan herhangi biri, kopyalanan item metninin herhangi bir yerinde gecerse eslesme sayilir ve islem durur.
 - Kontrol her zaman her tek tiklamadan sonra yapilir.
-- Kontrol sirasinda program mouse'u `Kontrol Noktasi` uzerine getirir ve varsayilan olarak `Ctrl+C` gonderir.
+- Kontrol sirasinda program mouse'u o an islenen item noktasina getirir ve varsayilan olarak `Ctrl+C` gonderir.
 - Kopyalanan metin panodan okunur ve `Aranan Mod` ile karsilastirilir.
-- Eslesme bulunursa islem hemen biter.
-- Eslesme bulunmazsa dongu devam eder.
+- Bir itemde eslesme bulunursa o item tamamlanir ve siradaki iteme gecilir.
+- Eslesme bulunmazsa ayni item icin dongu devam eder.
 
 ## Modlarin Farki
 
-- `Tekli Uretim`: her turda `Currency Noktasi`na sag tik yapar, sonra `Item Noktasi`na sol tik yapar, sonra kontrol eder.
-- `Shift Basili Tekrarli Tiklama`: once `Currency Noktasi`na bir kez sag tik yapar, sonra `Shift` tusuna basili tutar ve `Item Noktasi`na tekrar tekrar sol tik yapar. Her sol tiktan sonra `Shift` birakilmadan yine kontrol eder. Islem bitince `Shift` birakilir.
+- `Shift Basili Tekrarli Tiklama`: her item icin once `Currency Noktasi`na bir kez sag tik yapar, sonra `Shift` tusuna basili tutar ve o item noktasina tekrar tekrar sol tik yapar. Her sol tiktan sonra `Shift` birakilmadan ayni itemden kontrol eder. Mod bulununca `Shift` birakilir ve siradaki iteme gecer.
 
 ## Zamanlama Mantigi
 
@@ -44,7 +43,7 @@ Path of Exile benzeri kullanimda item yer degistirmez, sadece icerigi degisir. B
 - `Baslamadan Once`: `F8` bastiktan sonra ilk aksiyondan once bekler.
 - `Aksiyon Arasi`: sag tik ile sol tik gibi ard arda gelen aksiyonlar arasinda bekler.
 - `Craft Sonrasi`: iteme tikladiktan sonra kontrol oncesi bekler.
-- `Inspect Oncesi`: mouse kontrol noktasina geldikten sonra `Ctrl+C` oncesi bekler.
+- `Inspect Oncesi`: mouse item noktasina geldikten sonra `Ctrl+C` oncesi bekler.
 - `Kisayol Sonrasi`: `Ctrl+C` gonderildikten sonra panoyu okumadan once bekler.
 
 ## Guvenlik ve Durdurma
@@ -53,8 +52,7 @@ Path of Exile benzeri kullanimda item yer degistirmez, sadece icerigi degisir. B
 - `F9`: durdur
 - `Esc`: pencereyi kapat
 - `F6`: mevcut mouse konumunu `Currency Noktasi` olarak kaydet
-- `F7`: mevcut mouse konumunu `Item Noktasi` olarak kaydet
-- `F10`: mevcut mouse konumunu `Kontrol Noktasi` olarak kaydet
+- `F7`: mevcut mouse konumunu item listesine yeni `Item Noktasi` olarak ekle
 
 Program calisirken sen fareyi hareket ettirirsen, tiklarsan veya klavyede bir tusa basarsan otomatik durur. Bu sayede islem devam ederken kontrolu geri alabilirsin.
 
@@ -65,17 +63,19 @@ Program calisirken sen fareyi hareket ettirirsen, tiklarsan veya klavyede bir tu
 - `Kopyala Goster` kutusu aciksa manuel veya otomatik `Ctrl+C` ile gelen metinler de loga yazilir.
 - `F8` ile her yeni baslatmada tarih-saat adli yeni bir `.txt` dosyasi olusur.
 - Ekrandaki loglar ayni anda bu dosyaya da yazilir.
+- Her item bittiginde o item icin `sol tik` ve `sure` ozeti yazilir.
+- Islem dursa bile toplam item, toplam sol tik ve toplam sure ozeti yazilir.
 - Boylece sonradan hangi saatte ne oldugunu inceleyebilirsin.
 
 ## Dogru Kullanim Icin Notlar
 
-- Cogu senaryoda `Item Noktasi` ile `Kontrol Noktasi` ayni olur.
 - `Aranan Mod` icin tam satir yazmak en net sonuc verir, ama parcali metin de calisir.
 - Bos bir `Aranan Mod` satiri tamamen yok sayilir.
 - Sadece isaretli olan `Aranan Mod` satirlari kontrol edilir.
 - Buyuk-kucuk harf duyarliligi su an varsayilan olarak kapali, yani metin karsilastirmasi buyuk-kucuk harf farkina bakmaz.
 - `Ctrl+C` ile item bilgisinin gercekten panoya geldiginden once manuel test yapman iyi olur.
-- Program sadece kaydettigin koordinatlara tiklar; pencere yer degisir veya oyun arayuzu kayarsa koordinatlari yeniden kaydetmen gerekir.
+- `F7` ile itemleri ekleme sirasi isleme sirasi olur.
+- Program sadece kaydettigin koordinatlara tiklar; pencere yer degisir veya arayuz kayarsa koordinatlari yeniden kaydetmen gerekir.
 
 ## Calistirma
 

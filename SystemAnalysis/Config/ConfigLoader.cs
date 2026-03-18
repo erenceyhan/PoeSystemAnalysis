@@ -23,6 +23,7 @@ public static class ConfigLoader
         var result = config ?? throw new InvalidOperationException("Config okunamadi.");
         result.Timing.Normalize();
         result.ClipboardCheck.Normalize();
+        result.Normalize();
         return result;
     }
 
@@ -30,6 +31,7 @@ public static class ConfigLoader
     {
         config.Timing.Normalize();
         config.ClipboardCheck.Normalize();
+        config.Normalize();
         var json = JsonSerializer.Serialize(config, Options);
         File.WriteAllText(path, json);
     }

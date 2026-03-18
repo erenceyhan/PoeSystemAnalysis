@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Media;
 using SystemAnalysis.Config;
 using SystemAnalysis.Interop;
 
@@ -8,7 +10,8 @@ public sealed class AnalysisRunner
     private readonly AppConfig _config;
     private readonly Action<string>? _log;
     private readonly Random _random = new();
-    private int _totalLeftClicks;
+    private readonly List<ItemRunSummary> _completedItems = new();
+    private readonly Stopwatch _totalStopwatch = Stopwatch.StartNew();
     private bool _summaryLogged;
 
     public AnalysisRunner(AppConfig config, Action<string>? log = null)
@@ -19,99 +22,108 @@ public sealed class AnalysisRunner
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
+        ItemRunSummary? currentItem = null;
+
         try
         {
+            if (_config.TargetPoints.Count == 0)
+            {
+                Log("Calistirilacak item noktasi yok.");
+                return;
+            }
+
             var startDelay = NextDelay(_config.Timing.DelayBeforeStartMs);
             Log($"SystemAnalysis {startDelay} ms sonra baslayacak. Kontrolu eline alirsan otomatik durur.");
             await Task.Delay(startDelay, cancellationToken);
 
-            if (string.Equals(_config.Mode, "hold_shift_spam", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(_config.Mode, "hold_ctrl_spam", StringComparison.OrdinalIgnoreCase))
+            for (var i = 0; i < _config.TargetPoints.Count; i++)
             {
-                await RunHoldShiftSpamAsync(cancellationToken);
-                return;
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var point = _config.TargetPoints[i];
+                currentItem = new ItemRunSummary(i + 1, point);
+                Log($"Item {currentItem.Index}/{_config.TargetPoints.Count} basladi: {FormatPoint(point)}");
+
+                await RunHoldShiftSpamForItemAsync(currentItem, cancellationToken);
+
+                currentItem.Completed = true;
+                currentItem.Stopwatch.Stop();
+                _completedItems.Add(currentItem);
+                LogItemSummary(currentItem, "tamamlandi");
+                currentItem = null;
             }
 
-            await RunSingleCraftAsync(cancellationToken);
+            Log("Secilen tum itemler tamamlandi.");
+            SystemSounds.Asterisk.Play();
         }
         finally
         {
+            if (currentItem is not null)
+            {
+                currentItem.Stopwatch.Stop();
+                _completedItems.Add(currentItem);
+                LogItemSummary(currentItem, currentItem.Completed ? "tamamlandi" : "yarida kesildi");
+            }
+
+            InputController.ReleaseCommonModifiers();
             LogSummary();
         }
     }
 
-    private async Task RunSingleCraftAsync(CancellationToken cancellationToken)
+    private async Task RunHoldShiftSpamForItemAsync(ItemRunSummary item, CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            Log("Currency noktasina sag tik yapiliyor.");
-            RightClick(_config.SourcePoint);
-            await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+        var shiftHeld = false;
 
-            Log("Item noktasina sol tik yapiliyor.");
-            LeftClick(_config.TargetPoint);
-            _totalLeftClicks++;
-            await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
-
-            if (await InspectAsync(cancellationToken))
-            {
-                Log("Hedef mod bulundu. Islem durduruldu.");
-                LogSummary();
-                break;
-            }
-        }
-    }
-
-    private async Task RunHoldShiftSpamAsync(CancellationToken cancellationToken)
-    {
         try
         {
-            Log("Currency noktasina sag tik yapiliyor.");
+            Log($"Item {item.Index}: Currency noktasina sag tik yapiliyor.");
             RightClick(_config.SourcePoint);
             await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
 
-            Log("Shift tusu basili tutuluyor.");
+            Log($"Item {item.Index}: Shift tusu basili tutuluyor.");
             InputController.KeyDown(NativeMethods.VK_SHIFT);
+            shiftHeld = true;
             await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                Log("Item noktasina Shift basili sol tik yapiliyor.");
-                LeftClick(_config.TargetPoint);
-                _totalLeftClicks++;
+                Log($"Item {item.Index}: Shift basili sol tik yapiliyor.");
+                LeftClick(item.Point);
+                item.LeftClicks++;
                 await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
 
-                if (await InspectAsync(cancellationToken))
+                if (await InspectAsync(item, cancellationToken))
                 {
-                    Log("Hedef mod bulundu. Shift birakiliyor ve islem durduruluyor.");
-                    LogSummary();
-                    break;
+                    Log($"Item {item.Index}: Hedef mod bulundu.");
+                    return;
                 }
             }
         }
         finally
         {
-            InputController.ReleaseCommonModifiers();
-            InputController.KeyUp(NativeMethods.VK_SHIFT);
-            Log("Shift tusu birakildi.");
+            if (shiftHeld)
+            {
+                InputController.KeyUp(NativeMethods.VK_SHIFT);
+                Log($"Item {item.Index}: Shift tusu birakildi.");
+            }
         }
     }
 
-    private async Task<bool> InspectAsync(CancellationToken cancellationToken)
+    private async Task<bool> InspectAsync(ItemRunSummary item, CancellationToken cancellationToken)
     {
-        Log("Kontrol noktasi uzerine gidiliyor.");
-        InputController.MoveMouse(_config.InspectPoint.X, _config.InspectPoint.Y);
+        Log($"Item {item.Index}: Kontrol icin item noktasina gidiliyor.");
+        InputController.MoveMouse(item.Point.X, item.Point.Y);
         await Delay(_config.Timing.DelayBeforeInspectMs, cancellationToken, "Inspect Oncesi");
 
         var previousText = ClipboardHelper.GetText();
-        Log("Kontrol kisayolu gonderiliyor.");
+        Log($"Item {item.Index}: Kontrol kisayolu gonderiliyor.");
         TriggerClipboardShortcut();
         await Delay(_config.Timing.DelayAfterInspectShortcutMs, cancellationToken, "Kisayol Sonrasi");
         var currentText = ClipboardHelper.GetText();
 
         if (string.Equals(currentText, previousText, StringComparison.Ordinal))
         {
-            Log("Clipboard degismedi, yine de icerik kontrol edildi.");
+            Log($"Item {item.Index}: Clipboard degismedi, yine de icerik kontrol edildi.");
         }
 
         var comparison = _config.ClipboardCheck.CaseSensitive
@@ -120,21 +132,18 @@ public sealed class AnalysisRunner
 
         var rules = _config.ClipboardCheck.GetActiveRules().ToList();
         var matchedRule = rules.FirstOrDefault(rule => currentText.Contains(rule.Text, comparison));
-        var found = matchedRule is not null;
 
-        if (found)
+        if (matchedRule is not null)
         {
-            Log($"Eslesme bulundu: '{matchedRule!.Text}'");
-        }
-        else
-        {
-            var activeText = rules.Count == 0
-                ? "Aktif aranan mod yok"
-                : string.Join(" | ", rules.Select(rule => rule.Text));
-            Log($"Eslesme yok. Aranan ifadeler: '{activeText}'");
+            Log($"Item {item.Index}: Eslesme bulundu: '{matchedRule.Text}'");
+            return true;
         }
 
-        return found;
+        var activeText = rules.Count == 0
+            ? "Aktif aranan mod yok"
+            : string.Join(" | ", rules.Select(rule => rule.Text));
+        Log($"Item {item.Index}: Eslesme yok. Aranan ifadeler: '{activeText}'");
+        return false;
     }
 
     private void TriggerClipboardShortcut()
@@ -151,10 +160,7 @@ public sealed class AnalysisRunner
             return;
         }
 
-        if (!string.Equals(_config.ClipboardCheck.TriggerShortcut, "ctrl+alt+c", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new NotSupportedException("Bu surum sadece ctrl+c veya ctrl+alt+c kisayolunu destekliyor.");
-        }
+        throw new NotSupportedException("Bu surum sadece ctrl+c veya ctrl+alt+c kisayolunu destekliyor.");
     }
 
     private static void RightClick(PointConfig point)
@@ -169,11 +175,6 @@ public sealed class AnalysisRunner
         InputController.MoveMouse(point.X, point.Y);
         Thread.Sleep(50);
         InputController.LeftClick();
-    }
-
-    private static Task Delay(int milliseconds, CancellationToken cancellationToken)
-    {
-        return Task.Delay(Math.Max(0, milliseconds), cancellationToken);
     }
 
     private Task Delay(DelayRange range, CancellationToken cancellationToken, string label)
@@ -200,6 +201,11 @@ public sealed class AnalysisRunner
         _log?.Invoke(message);
     }
 
+    private void LogItemSummary(ItemRunSummary item, string status)
+    {
+        Log($"Item {item.Index} {status}. Konum: {FormatPoint(item.Point)} | Sol tik: {item.LeftClicks} | Sure: {FormatDuration(item.Stopwatch.Elapsed)}");
+    }
+
     private void LogSummary()
     {
         if (_summaryLogged)
@@ -207,7 +213,42 @@ public sealed class AnalysisRunner
             return;
         }
 
-        Log($"Toplam sol tik sayisi: {_totalLeftClicks}");
+        _totalStopwatch.Stop();
+        var totalLeftClicks = _completedItems.Sum(item => item.LeftClicks);
+        Log($"Toplam item sayisi: {_completedItems.Count}");
+        Log($"Toplam sol tik sayisi: {totalLeftClicks}");
+        Log($"Toplam sure: {FormatDuration(_totalStopwatch.Elapsed)}");
         _summaryLogged = true;
+    }
+
+    private static string FormatPoint(PointConfig point)
+    {
+        return $"X: {point.X}, Y: {point.Y}";
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+        {
+            return duration.ToString(@"hh\:mm\:ss");
+        }
+
+        return duration.ToString(@"mm\:ss");
+    }
+
+    private sealed class ItemRunSummary
+    {
+        public ItemRunSummary(int index, PointConfig point)
+        {
+            Index = index;
+            Point = point;
+            Stopwatch = Stopwatch.StartNew();
+        }
+
+        public int Index { get; }
+        public PointConfig Point { get; }
+        public Stopwatch Stopwatch { get; }
+        public int LeftClicks { get; set; }
+        public bool Completed { get; set; }
     }
 }

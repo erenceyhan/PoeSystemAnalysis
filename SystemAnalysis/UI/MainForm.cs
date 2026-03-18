@@ -12,16 +12,21 @@ public sealed class MainForm : Form
     private readonly AppConfig _config;
     private readonly GlobalInputMonitor _monitor;
     private readonly object _sync = new();
+    private readonly object _fileLogSync = new();
 
     private CancellationTokenSource? _runCancellation;
     private Task? _currentRun;
+    private string? _currentLogFilePath;
+    private string _lastClipboardText = string.Empty;
 
     private readonly List<CheckBox> _matchRuleCheckBoxes = new();
-    private readonly List<TextBox> _matchRuleTextBoxes = new();
+    private readonly List<ComboBox> _matchRuleComboBoxes = new();
     private readonly ComboBox _modeComboBox;
     private readonly Label _sourceLabel;
     private readonly Label _targetLabel;
-    private readonly Label _inspectLabel;
+    private readonly ListBox _targetPointsListBox;
+    private readonly ListBox _savedModsListBox;
+    private readonly TextBox _newSavedModTextBox;
     private readonly NumericUpDown _delayBeforeStartMinInput;
     private readonly NumericUpDown _delayBeforeStartMaxInput;
     private readonly NumericUpDown _delayBetweenActionsMinInput;
@@ -37,9 +42,6 @@ public sealed class MainForm : Form
     private readonly Button _startButton;
     private readonly Button _stopButton;
     private readonly TextBox _logTextBox;
-    private readonly object _fileLogSync = new();
-    private string? _currentLogFilePath;
-    private string _lastClipboardText = string.Empty;
 
     public MainForm(string configPath, AppConfig config)
     {
@@ -49,8 +51,8 @@ public sealed class MainForm : Form
 
         Text = "SystemAnalysis";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(1040, 860);
-        Size = new Size(1160, 980);
+        MinimumSize = new Size(940, 760);
+        Size = new Size(1040, 860);
 
         var splitContainer = new SplitContainer
         {
@@ -60,27 +62,28 @@ public sealed class MainForm : Form
             FixedPanel = FixedPanel.Panel2
         };
 
-        var topScrollPanel = new Panel
+        var panel1Container = new Panel
         {
             Dock = DockStyle.Fill,
-            AutoScroll = true,
             Padding = new Padding(12)
         };
 
-        var topContent = new FlowLayoutPanel
+        var tabs = new TabControl
         {
-            Dock = DockStyle.Top,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoSize = true
+            Dock = DockStyle.Fill
         };
+
+        var settingsTab = CreateTabPage("Craft Ayarlari");
+        var timingTab = CreateTabPage("Zamanlama");
+        var pointsTab = CreateTabPage("Noktalar");
+        var modsTab = CreateTabPage("Kayitli Modlar");
 
         var settingsGroup = new GroupBox
         {
             Dock = DockStyle.Top,
             Text = "Craft Ayarlari",
             AutoSize = true,
-            Width = 1090
+            Width = 970
         };
 
         var settingsGrid = new TableLayoutPanel
@@ -105,30 +108,32 @@ public sealed class MainForm : Form
             };
             rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
             var enabledCheckBox = new CheckBox { AutoSize = true, Checked = rule.Enabled, Text = "Aktif" };
-            var ruleTextBox = new TextBox { Dock = DockStyle.Top, Text = rule.Text };
+            enabledCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
+            var ruleComboBox = new ComboBox
+            {
+                Dock = DockStyle.Top,
+                DropDownStyle = ComboBoxStyle.DropDownList
+            };
+            ruleComboBox.SelectedIndexChanged += (_, _) => SaveUiToConfig();
             _matchRuleCheckBoxes.Add(enabledCheckBox);
-            _matchRuleTextBoxes.Add(ruleTextBox);
+            _matchRuleComboBoxes.Add(ruleComboBox);
             rulePanel.Controls.Add(enabledCheckBox, 0, 0);
-            rulePanel.Controls.Add(ruleTextBox, 1, 0);
+            rulePanel.Controls.Add(ruleComboBox, 1, 0);
             settingsGrid.Controls.Add(rulePanel, 1, i);
         }
 
-        settingsGrid.Controls.Add(new Label { Text = "Calisma Modu", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 5);
         _modeComboBox = new ComboBox
         {
             Dock = DockStyle.Top,
-            DropDownStyle = ComboBoxStyle.DropDownList
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Visible = false
         };
-        _modeComboBox.Items.AddRange(new object[]
-        {
-            new ModeOption("single_craft", "Tekli Uretim"),
-            new ModeOption("hold_shift_spam", "Shift Basili Tekrarli Tiklama")
-        });
+        _modeComboBox.Items.Add(new ModeOption("hold_shift_spam", "Shift Basili Tekrarli Tiklama"));
         SelectMode();
-        settingsGrid.Controls.Add(_modeComboBox, 1, 5);
 
-        settingsGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 6);
+        settingsGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 5);
         var logPathPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -142,9 +147,9 @@ public sealed class MainForm : Form
         var chooseLogFolderButton = new Button { Text = "Klasor Sec", AutoSize = true };
         chooseLogFolderButton.Click += (_, _) => ChooseLogDirectory();
         logPathPanel.Controls.Add(chooseLogFolderButton, 1, 0);
-        settingsGrid.Controls.Add(logPathPanel, 1, 6);
+        settingsGrid.Controls.Add(logPathPanel, 1, 5);
 
-        settingsGrid.Controls.Add(new Label { Text = "Kopyala Goster", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 7);
+        settingsGrid.Controls.Add(new Label { Text = "Kopyala Goster", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 6);
         _showCopiedTextCheckBox = new CheckBox
         {
             AutoSize = true,
@@ -152,7 +157,7 @@ public sealed class MainForm : Form
             Text = "Kopyalanan metni logla"
         };
         _showCopiedTextCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
-        settingsGrid.Controls.Add(_showCopiedTextCheckBox, 1, 7);
+        settingsGrid.Controls.Add(_showCopiedTextCheckBox, 1, 6);
 
         settingsGroup.Controls.Add(settingsGrid);
 
@@ -161,7 +166,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Top,
             Text = "Zamanlama (ms)",
             AutoSize = true,
-            Width = 1090
+            Width = 970
         };
 
         var timingGrid = new TableLayoutPanel
@@ -180,41 +185,51 @@ public sealed class MainForm : Form
         timingGrid.Controls.Add(new Label { Text = "Baslamadan Once", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
         timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left }, 1, 0);
         _delayBeforeStartMinInput = CreateTimingInput(_config.Timing.DelayBeforeStartMs.Min);
+        _delayBeforeStartMinInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayBeforeStartMinInput, 2, 0);
         timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left }, 3, 0);
         _delayBeforeStartMaxInput = CreateTimingInput(_config.Timing.DelayBeforeStartMs.Max);
+        _delayBeforeStartMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayBeforeStartMaxInput, 4, 0);
 
         timingGrid.Controls.Add(new Label { Text = "Aksiyon Arasi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 1);
         timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left }, 1, 1);
         _delayBetweenActionsMinInput = CreateTimingInput(_config.Timing.DelayBetweenActionsMs.Min);
+        _delayBetweenActionsMinInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayBetweenActionsMinInput, 2, 1);
         timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left }, 3, 1);
         _delayBetweenActionsMaxInput = CreateTimingInput(_config.Timing.DelayBetweenActionsMs.Max);
+        _delayBetweenActionsMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayBetweenActionsMaxInput, 4, 1);
 
         timingGrid.Controls.Add(new Label { Text = "Craft Sonrasi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 2);
         timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left }, 1, 2);
         _delayAfterCraftMinInput = CreateTimingInput(_config.Timing.DelayAfterCraftMs.Min);
+        _delayAfterCraftMinInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayAfterCraftMinInput, 2, 2);
         timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left }, 3, 2);
         _delayAfterCraftMaxInput = CreateTimingInput(_config.Timing.DelayAfterCraftMs.Max);
+        _delayAfterCraftMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayAfterCraftMaxInput, 4, 2);
 
         timingGrid.Controls.Add(new Label { Text = "Inspect Oncesi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 3);
         timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left }, 1, 3);
         _delayBeforeInspectMinInput = CreateTimingInput(_config.Timing.DelayBeforeInspectMs.Min);
+        _delayBeforeInspectMinInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayBeforeInspectMinInput, 2, 3);
         timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left }, 3, 3);
         _delayBeforeInspectMaxInput = CreateTimingInput(_config.Timing.DelayBeforeInspectMs.Max);
+        _delayBeforeInspectMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayBeforeInspectMaxInput, 4, 3);
 
         timingGrid.Controls.Add(new Label { Text = "Kisayol Sonrasi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 4);
         timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left }, 1, 4);
         _delayAfterInspectShortcutMinInput = CreateTimingInput(_config.Timing.DelayAfterInspectShortcutMs.Min);
+        _delayAfterInspectShortcutMinInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayAfterInspectShortcutMinInput, 2, 4);
         timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left }, 3, 4);
         _delayAfterInspectShortcutMaxInput = CreateTimingInput(_config.Timing.DelayAfterInspectShortcutMs.Max);
+        _delayAfterInspectShortcutMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayAfterInspectShortcutMaxInput, 4, 4);
 
         timingGroup.Controls.Add(timingGrid);
@@ -224,7 +239,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Top,
             Text = "Noktalar",
             AutoSize = true,
-            Width = 1090
+            Width = 970
         };
 
         var pointsGrid = new TableLayoutPanel
@@ -234,9 +249,9 @@ public sealed class MainForm : Form
             ColumnCount = 3,
             AutoSize = true
         };
-        pointsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
-        pointsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         pointsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+        pointsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        pointsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
 
         pointsGrid.Controls.Add(new Label { Text = "Currency Noktasi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
         _sourceLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
@@ -245,29 +260,124 @@ public sealed class MainForm : Form
         captureSourceButton.Click += (_, _) => CapturePoint(PointKind.Source);
         pointsGrid.Controls.Add(captureSourceButton, 2, 0);
 
-        pointsGrid.Controls.Add(new Label { Text = "Item Noktasi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 1);
+        pointsGrid.Controls.Add(new Label { Text = "Item Noktalari", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 1);
+        var itemPointsPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            AutoSize = true
+        };
+        itemPointsPanel.Controls.Add(new Label
+        {
+            Text = "Item noktalari oturumluktur.",
+            AutoSize = true
+        }, 0, 0);
         _targetLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
-        pointsGrid.Controls.Add(_targetLabel, 1, 1);
-        var captureTargetButton = new Button { Text = "Mouse'tan Kaydet (F7)", AutoSize = true, Anchor = AnchorStyles.Right };
-        captureTargetButton.Click += (_, _) => CapturePoint(PointKind.Target);
-        pointsGrid.Controls.Add(captureTargetButton, 2, 1);
+        _targetPointsListBox = new ListBox
+        {
+            Dock = DockStyle.Top,
+            Height = 130,
+            IntegralHeight = false
+        };
+        itemPointsPanel.Controls.Add(_targetLabel, 0, 1);
+        itemPointsPanel.Controls.Add(_targetPointsListBox, 0, 2);
+        pointsGrid.Controls.Add(itemPointsPanel, 1, 1);
 
-        pointsGrid.Controls.Add(new Label { Text = "Kontrol Noktasi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 2);
-        _inspectLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
-        pointsGrid.Controls.Add(_inspectLabel, 1, 2);
-        var captureInspectButton = new Button { Text = "Mouse'tan Kaydet (F10)", AutoSize = true, Anchor = AnchorStyles.Right };
-        captureInspectButton.Click += (_, _) => CapturePoint(PointKind.Inspect);
-        pointsGrid.Controls.Add(captureInspectButton, 2, 2);
+        var itemButtonsPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true
+        };
+        var captureTargetButton = new Button { Text = "Mouse'tan Ekle (F7)", AutoSize = true };
+        captureTargetButton.Click += (_, _) => CapturePoint(PointKind.Target);
+        itemButtonsPanel.Controls.Add(captureTargetButton);
+
+        var removeLastTargetButton = new Button { Text = "Sonuncuyu Sil", AutoSize = true };
+        removeLastTargetButton.Click += (_, _) => RemoveLastTargetPoint();
+        itemButtonsPanel.Controls.Add(removeLastTargetButton);
+
+        var clearTargetPointsButton = new Button { Text = "Listeyi Temizle", AutoSize = true };
+        clearTargetPointsButton.Click += (_, _) => ClearTargetPoints();
+        itemButtonsPanel.Controls.Add(clearTargetPointsButton);
+        pointsGrid.Controls.Add(itemButtonsPanel, 2, 1);
 
         pointsGroup.Controls.Add(pointsGrid);
 
-        var actionsPanel = new FlowLayoutPanel
+        var modsGroup = new GroupBox
         {
             Dock = DockStyle.Top,
+            Text = "Kayitli Mod Listesi",
+            AutoSize = true,
+            Width = 970
+        };
+
+        var modsGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 2,
+            AutoSize = true
+        };
+        modsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        modsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
+
+        var leftModsPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            AutoSize = true
+        };
+        leftModsPanel.Controls.Add(new Label
+        {
+            Text = "Buraya ekledigin modlar kalici olarak kaydedilir ve Aranan Mod secim kutularinda gorunur.",
+            AutoSize = true
+        }, 0, 0);
+
+        _savedModsListBox = new ListBox
+        {
+            Dock = DockStyle.Top,
+            Height = 220,
+            IntegralHeight = false
+        };
+        leftModsPanel.Controls.Add(_savedModsListBox, 0, 1);
+        modsGrid.Controls.Add(leftModsPanel, 0, 0);
+
+        var rightModsPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true
+        };
+        _newSavedModTextBox = new TextBox
+        {
+            Width = 190
+        };
+        rightModsPanel.Controls.Add(_newSavedModTextBox);
+
+        var addSavedModButton = new Button { Text = "Mod Ekle", AutoSize = true };
+        addSavedModButton.Click += (_, _) => AddSavedMod();
+        rightModsPanel.Controls.Add(addSavedModButton);
+
+        var removeSavedModButton = new Button { Text = "Secileni Sil", AutoSize = true };
+        removeSavedModButton.Click += (_, _) => RemoveSelectedSavedMod();
+        rightModsPanel.Controls.Add(removeSavedModButton);
+
+        var clearSavedModsButton = new Button { Text = "Listeyi Temizle", AutoSize = true };
+        clearSavedModsButton.Click += (_, _) => ClearSavedMods();
+        rightModsPanel.Controls.Add(clearSavedModsButton);
+        modsGrid.Controls.Add(rightModsPanel, 1, 0);
+
+        modsGroup.Controls.Add(modsGrid);
+
+        var actionsPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
             AutoSize = true,
             FlowDirection = FlowDirection.LeftToRight,
             Padding = new Padding(0, 4, 0, 4),
-            Width = 1090,
             WrapContents = true
         };
 
@@ -279,17 +389,9 @@ public sealed class MainForm : Form
         _stopButton.Click += (_, _) => StopCurrentRun("Durdurma istendi.");
         actionsPanel.Controls.Add(_stopButton);
 
-        var saveButton = new Button { Text = "Ayarlari Kaydet", AutoSize = true };
-        saveButton.Click += (_, _) =>
-        {
-            SaveUiToConfig();
-            AppendLog("Ayarlar kaydedildi.");
-        };
-        actionsPanel.Controls.Add(saveButton);
-
         var helpLabel = new Label
         {
-            Text = "Genelde kontrol noktasi item ile ayni olur. Esc kapatir; bot calisirken fare veya klavye hareketi otomatik durdurur.",
+            Text = "F6 currency noktasini kaydeder. F7 her basista yeni item noktasi ekler. Esc kapatir; calisirken fare veya klavye hareketi otomatik durdurur.",
             AutoSize = true,
             Margin = new Padding(18, 8, 0, 0)
         };
@@ -311,13 +413,19 @@ public sealed class MainForm : Form
         };
         logGroup.Controls.Add(_logTextBox);
 
-        topContent.Controls.Add(settingsGroup);
-        topContent.Controls.Add(timingGroup);
-        topContent.Controls.Add(pointsGroup);
-        topContent.Controls.Add(actionsPanel);
-        topScrollPanel.Controls.Add(topContent);
+        ((Panel)settingsTab.Controls[0]).Controls.Add(settingsGroup);
+        ((Panel)timingTab.Controls[0]).Controls.Add(timingGroup);
+        ((Panel)pointsTab.Controls[0]).Controls.Add(pointsGroup);
+        ((Panel)modsTab.Controls[0]).Controls.Add(modsGroup);
+        tabs.TabPages.Add(settingsTab);
+        tabs.TabPages.Add(timingTab);
+        tabs.TabPages.Add(pointsTab);
+        tabs.TabPages.Add(modsTab);
 
-        splitContainer.Panel1.Controls.Add(topScrollPanel);
+        panel1Container.Controls.Add(tabs);
+        panel1Container.Controls.Add(actionsPanel);
+
+        splitContainer.Panel1.Controls.Add(panel1Container);
         splitContainer.Panel2.Padding = new Padding(12, 0, 12, 12);
         splitContainer.Panel2.Controls.Add(logGroup);
 
@@ -336,6 +444,7 @@ public sealed class MainForm : Form
         };
 
         RefreshPointLabels();
+        RefreshSavedModsUi();
         HookMonitorEvents();
         _monitor.Start();
         NativeMethods.AddClipboardFormatListener(Handle);
@@ -346,6 +455,7 @@ public sealed class MainForm : Form
     {
         StopCurrentRun("Pencere kapatildi.");
         InputController.ReleaseCommonModifiers();
+        SaveUiToConfig();
         NativeMethods.RemoveClipboardFormatListener(Handle);
         _monitor.Dispose();
         base.OnFormClosed(e);
@@ -358,7 +468,6 @@ public sealed class MainForm : Form
         _monitor.ExitRequested += () => InvokeOnUi(Close);
         _monitor.CaptureSourceRequested += () => InvokeOnUi(() => CapturePoint(PointKind.Source));
         _monitor.CaptureTargetRequested += () => InvokeOnUi(() => CapturePoint(PointKind.Target));
-        _monitor.CaptureInspectRequested += () => InvokeOnUi(() => CapturePoint(PointKind.Inspect));
     }
 
     private void StartRun()
@@ -372,6 +481,13 @@ public sealed class MainForm : Form
             }
 
             SaveUiToConfig();
+
+            if (_config.TargetPoints.Count == 0)
+            {
+                AppendLog("En az bir item noktasi eklemeden baslatamazsin.");
+                return;
+            }
+
             _runCancellation = new CancellationTokenSource();
             PrepareRunLogFile();
             _monitor.IsArmed = true;
@@ -426,14 +542,15 @@ public sealed class MainForm : Form
 
     private void SaveUiToConfig()
     {
-        for (var i = 0; i < _config.ClipboardCheck.MatchRules.Count && i < _matchRuleTextBoxes.Count; i++)
+        for (var i = 0; i < _config.ClipboardCheck.MatchRules.Count && i < _matchRuleComboBoxes.Count; i++)
         {
             _config.ClipboardCheck.MatchRules[i].Enabled = _matchRuleCheckBoxes[i].Checked;
-            _config.ClipboardCheck.MatchRules[i].Text = _matchRuleTextBoxes[i].Text.Trim();
+            _config.ClipboardCheck.MatchRules[i].Text = _matchRuleComboBoxes[i].SelectedItem?.ToString()?.Trim() ?? string.Empty;
         }
 
         var firstActiveRule = _config.ClipboardCheck.GetActiveRules().FirstOrDefault();
         _config.ClipboardCheck.MustContain = firstActiveRule?.Text ?? string.Empty;
+
         if (_modeComboBox.SelectedItem is ModeOption option)
         {
             _config.Mode = option.Value;
@@ -459,27 +576,165 @@ public sealed class MainForm : Form
             case PointKind.Source:
                 _config.SourcePoint.X = x;
                 _config.SourcePoint.Y = y;
+                AppendLog($"Currency noktasi kaydedildi: {x}, {y}");
                 break;
             case PointKind.Target:
-                _config.TargetPoint.X = x;
-                _config.TargetPoint.Y = y;
-                break;
-            case PointKind.Inspect:
-                _config.InspectPoint.X = x;
-                _config.InspectPoint.Y = y;
+                _config.TargetPoints.Add(new PointConfig { X = x, Y = y });
+                AppendLog($"Item noktasi eklendi ({_config.TargetPoints.Count}. sira): {x}, {y}");
                 break;
         }
 
         ConfigLoader.Save(_configPath, _config);
         RefreshPointLabels();
-        AppendLog($"{pointKind} noktasi kaydedildi: {x}, {y}");
+    }
+
+    private void RemoveLastTargetPoint()
+    {
+        if (_config.TargetPoints.Count == 0)
+        {
+            AppendLog("Silinecek item noktasi yok.");
+            return;
+        }
+
+        var removedPoint = _config.TargetPoints[^1];
+        _config.TargetPoints.RemoveAt(_config.TargetPoints.Count - 1);
+        ConfigLoader.Save(_configPath, _config);
+        RefreshPointLabels();
+        AppendLog($"Son item noktasi silindi: {FormatPoint(removedPoint)}");
+    }
+
+    private void ClearTargetPoints()
+    {
+        if (_config.TargetPoints.Count == 0)
+        {
+            AppendLog("Item noktasi listesi zaten bos.");
+            return;
+        }
+
+        _config.TargetPoints.Clear();
+        ConfigLoader.Save(_configPath, _config);
+        RefreshPointLabels();
+        AppendLog("Item noktasi listesi temizlendi.");
     }
 
     private void RefreshPointLabels()
     {
         _sourceLabel.Text = FormatPoint(_config.SourcePoint);
-        _targetLabel.Text = FormatPoint(_config.TargetPoint);
-        _inspectLabel.Text = FormatPoint(_config.InspectPoint);
+        _targetLabel.Text = $"{_config.TargetPoints.Count} item noktasi secili";
+
+        _targetPointsListBox.BeginUpdate();
+        _targetPointsListBox.Items.Clear();
+
+        for (var i = 0; i < _config.TargetPoints.Count; i++)
+        {
+            _targetPointsListBox.Items.Add($"{i + 1}. {FormatPoint(_config.TargetPoints[i])}");
+        }
+
+        _targetPointsListBox.EndUpdate();
+    }
+
+    private void RefreshSavedModsUi()
+    {
+        _savedModsListBox.BeginUpdate();
+        _savedModsListBox.Items.Clear();
+        foreach (var savedMod in _config.SavedMods)
+        {
+            _savedModsListBox.Items.Add(savedMod);
+        }
+        _savedModsListBox.EndUpdate();
+
+        for (var i = 0; i < _matchRuleComboBoxes.Count; i++)
+        {
+            var comboBox = _matchRuleComboBoxes[i];
+            var selectedText = _config.ClipboardCheck.MatchRules[i].Text;
+            comboBox.BeginUpdate();
+            comboBox.Items.Clear();
+            comboBox.Items.Add(string.Empty);
+            foreach (var savedMod in _config.SavedMods)
+            {
+                comboBox.Items.Add(savedMod);
+            }
+
+            var selectedIndex = 0;
+            if (!string.IsNullOrWhiteSpace(selectedText))
+            {
+                for (var itemIndex = 0; itemIndex < comboBox.Items.Count; itemIndex++)
+                {
+                    if (string.Equals(comboBox.Items[itemIndex]?.ToString(), selectedText, StringComparison.OrdinalIgnoreCase))
+                    {
+                        selectedIndex = itemIndex;
+                        break;
+                    }
+                }
+            }
+
+            comboBox.SelectedIndex = selectedIndex;
+            comboBox.EndUpdate();
+        }
+    }
+
+    private void AddSavedMod()
+    {
+        var newMod = _newSavedModTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(newMod))
+        {
+            AppendLog("Eklenecek mod bos olamaz.");
+            return;
+        }
+
+        if (_config.SavedMods.Contains(newMod, StringComparer.OrdinalIgnoreCase))
+        {
+            AppendLog("Bu mod zaten kayitli.");
+            return;
+        }
+
+        _config.SavedMods.Add(newMod);
+        _config.Normalize();
+        RefreshSavedModsUi();
+        SaveUiToConfig();
+        _newSavedModTextBox.Clear();
+        AppendLog($"Kayitli mod eklendi: {newMod}");
+    }
+
+    private void RemoveSelectedSavedMod()
+    {
+        if (_savedModsListBox.SelectedItem is not string selectedMod)
+        {
+            AppendLog("Silmek icin listeden bir mod sec.");
+            return;
+        }
+
+        _config.SavedMods.RemoveAll(mod => string.Equals(mod, selectedMod, StringComparison.OrdinalIgnoreCase));
+        foreach (var rule in _config.ClipboardCheck.MatchRules.Where(rule => string.Equals(rule.Text, selectedMod, StringComparison.OrdinalIgnoreCase)))
+        {
+            rule.Text = string.Empty;
+            rule.Enabled = false;
+        }
+
+        _config.Normalize();
+        RefreshSavedModsUi();
+        SaveUiToConfig();
+        AppendLog($"Kayitli mod silindi: {selectedMod}");
+    }
+
+    private void ClearSavedMods()
+    {
+        if (_config.SavedMods.Count == 0)
+        {
+            AppendLog("Kayitli mod listesi zaten bos.");
+            return;
+        }
+
+        _config.SavedMods.Clear();
+        foreach (var rule in _config.ClipboardCheck.MatchRules)
+        {
+            rule.Text = string.Empty;
+            rule.Enabled = false;
+        }
+
+        RefreshSavedModsUi();
+        SaveUiToConfig();
+        AppendLog("Kayitli mod listesi temizlendi.");
     }
 
     private void SetRunningState(bool isRunning)
@@ -544,13 +799,17 @@ public sealed class MainForm : Form
 
         Directory.CreateDirectory(directory);
         _currentLogFilePath = Path.Combine(directory, $"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt");
+        var activeRules = _config.ClipboardCheck.GetActiveRules().Select(rule => rule.Text).ToList();
+        var targetPointsText = _config.TargetPoints.Count == 0
+            ? "Secili item noktasi yok"
+            : string.Join(", ", _config.TargetPoints.Select((point, index) => $"{index + 1}. {FormatPoint(point)}"));
+
         var header = new StringBuilder()
             .AppendLine($"SystemAnalysis log basladi: {DateTime.Now:yyyy-MM-dd HH:mm:ss}")
             .AppendLine($"Mod: {_config.Mode}")
-            .AppendLine($"Aranan Mod: {_config.ClipboardCheck.MustContain}")
+            .AppendLine($"Aranan Modlar: {(activeRules.Count == 0 ? "Aktif aranan mod yok" : string.Join(" | ", activeRules))}")
             .AppendLine($"Currency Noktasi: {FormatPoint(_config.SourcePoint)}")
-            .AppendLine($"Item Noktasi: {FormatPoint(_config.TargetPoint)}")
-            .AppendLine($"Kontrol Noktasi: {FormatPoint(_config.InspectPoint)}")
+            .AppendLine($"Item Noktalari: {targetPointsText}")
             .AppendLine(new string('-', 48))
             .ToString();
 
@@ -648,11 +907,24 @@ public sealed class MainForm : Form
         return new DelayRange(Decimal.ToInt32(minInput.Value), Decimal.ToInt32(maxInput.Value));
     }
 
+    private static TabPage CreateTabPage(string title)
+    {
+        var tab = new TabPage(title);
+        var panel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            Padding = new Padding(8)
+        };
+
+        tab.Controls.Add(panel);
+        return tab;
+    }
+
     private enum PointKind
     {
         Source,
-        Target,
-        Inspect
+        Target
     }
 
     private sealed record ModeOption(string Value, string Label)

@@ -1,15 +1,53 @@
+using System.Text.Json.Serialization;
+
 namespace SystemAnalysis.Config;
 
 public sealed class AppConfig
 {
-    public string Mode { get; set; } = "single_craft";
+    public string Mode { get; set; } = "hold_shift_spam";
     public PointConfig SourcePoint { get; set; } = new();
     public PointConfig TargetPoint { get; set; } = new();
     public PointConfig InspectPoint { get; set; } = new();
+    [JsonIgnore]
+    public List<PointConfig> TargetPoints { get; set; } = new();
+    public List<string> SavedMods { get; set; } = new();
     public ClipboardCheckConfig ClipboardCheck { get; set; } = new();
     public TimingConfig Timing { get; set; } = new();
     public SafetyConfig Safety { get; set; } = new();
     public LoggingConfig Logging { get; set; } = new();
+
+    public void Normalize()
+    {
+        if (!string.Equals(Mode, "hold_shift_spam", StringComparison.OrdinalIgnoreCase))
+        {
+            Mode = "hold_shift_spam";
+        }
+
+        SavedMods ??= new List<string>();
+        SavedMods = SavedMods
+            .Where(mod => !string.IsNullOrWhiteSpace(mod))
+            .Select(mod => mod.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(mod => mod, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var ruleText in ClipboardCheck.MatchRules
+                     .Where(rule => !string.IsNullOrWhiteSpace(rule.Text))
+                     .Select(rule => rule.Text.Trim()))
+        {
+            if (!SavedMods.Contains(ruleText, StringComparer.OrdinalIgnoreCase))
+            {
+                SavedMods.Add(ruleText);
+            }
+        }
+
+        SavedMods = SavedMods
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(mod => mod, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        TargetPoints ??= new List<PointConfig>();
+    }
 }
 
 public sealed class PointConfig

@@ -28,7 +28,6 @@ public sealed class GlobalInputMonitor : IDisposable
     public event Action? ExitRequested;
     public event Action? CaptureSourceRequested;
     public event Action? CaptureTargetRequested;
-    public event Action? CaptureInspectRequested;
 
     public void Start()
     {
@@ -83,10 +82,6 @@ public sealed class GlobalInputMonitor : IDisposable
             else if (key == NativeMethods.VK_F7)
             {
                 CaptureTargetRequested?.Invoke();
-            }
-            else if (key == NativeMethods.VK_F10)
-            {
-                CaptureInspectRequested?.Invoke();
             }
             else if (IsArmed)
             {
