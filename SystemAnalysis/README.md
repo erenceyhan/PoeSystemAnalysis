@@ -1,90 +1,222 @@
 # SystemAnalysis
 
- Bu surum, kucuk bir arayuz uzerinden aradigin metni yazip birden fazla item noktasi uzerinde akisi sirayla calistirmana izin verir. Belirledigin noktalara normal hizda tiklar ve her tiklamadan sonra ayni item noktasinda `Ctrl+C` ile bilgiyi panoya alip istedigin modun gelip gelmedigini kontrol eder.
+Bu surum, ekrandaki belirli noktalara tiklayip item metnini `Ctrl+C` ile okuyarak craft akislarini sirali ve kontrollu sekilde yoneten Windows Forms uygulamasidir.
 
-## Ozellikler
+## Ne Yapar
 
-- `hold_shift_spam`: secili her item icin currency noktasina bir kez sag tik, `Shift` basili tutarak ayni item noktasina tekrar tekrar sol tik
-- Her sol tiktan sonra kesin olarak kontrol yapar
-- Kullanici fareyi oynatirsa, tiklarsa veya klavyede tusa basarsa otomatik durur
-- Arayuzden birden fazla aranan mod ve zamanlama degerlerini girebilirsin
-- `F6` ile currency noktasi, `F7` ile ise istedigin kadar item noktasi ekleyebilirsin
-- `F8` ile baslat, `F9` ile durdur, `Esc` ile islemi durdur
-- `F8` ile baslayinca secilen log klasorunde tarih-saat adli bir `.txt` log dosyasi olusur
-- Her item icin kac sol tik atildigi ve ne kadar surdugu loglanir
-- Tum secili itemler bitince kisa bir uyari sesi calar
+- Bir veya iki currency noktasi ile calisir.
+- Birden fazla item noktasi tanimlayabilirsin.
+- Her tiklamadan sonra itemi ayni noktada kontrol eder.
+- Fare hareketi, tiklama veya klavye tusu algilanirsa otomatik durur.
+- Loglari hem ekranda hem de `.txt` dosyasinda tutar.
+- Itemlar tamamlandikca UI listesinden kaldirilir.
 
-## Arayuz Mantigi
+## Temel Mantik
 
-- `Currency Noktasi`: basilacak currency
-- `Item Noktalari`: sirasiyla islenecek tum itemler
+Program iki ana akisi destekler:
 
-Kontrol icin ayri bir nokta secilmez. Program her itemde kontrolu dogrudan o item noktasinda yapar.
+- `Sadece Alteration`
+- `Alteration + Augment`
 
-## Programin Calisma Mantigi
+Hangi akisin calisacagi `Augment Akisi` kutusuna gore belirlenir.
 
-- Aktif ve dolu olan `Aranan Mod` satirlarindan herhangi biri, kopyalanan item metninin herhangi bir yerinde gecerse eslesme sayilir ve islem durur.
-- Kontrol her zaman her tek tiklamadan sonra yapilir.
-- Kontrol sirasinda program mouse'u o an islenen item noktasina getirir ve varsayilan olarak `Ctrl+C` gonderir.
-- Kopyalanan metin panodan okunur ve `Aranan Mod` ile karsilastirilir.
-- Bir itemde eslesme bulunursa o item tamamlanir ve siradaki iteme gecilir.
-- Eslesme bulunmazsa ayni item icin dongu devam eder.
+### Sadece Alteration
 
-## Modlarin Farki
+Her item icin:
 
-- `Shift Basili Tekrarli Tiklama`: her item icin once `Currency Noktasi`na bir kez sag tik yapar, sonra `Shift` tusuna basili tutar ve o item noktasina tekrar tekrar sol tik yapar. Her sol tiktan sonra `Shift` birakilmadan ayni itemden kontrol eder. Mod bulununca `Shift` birakilir ve siradaki iteme gecer.
+1. `Alteration` noktasina sag tik yapar.
+2. `Shift` basili tutar.
+3. Iteme sol tik atar.
+4. Ayni item ustunde `Ctrl+C` ile metni okur.
+5. `Aranan Mod` kutularindan biri gelirse item tamamlanir.
+6. Gelmezse devam eder.
 
-## Zamanlama Mantigi
+### Alteration + Augment
 
-- Her zamanlama alani artik `Min` ve `Max` olarak calisir.
-- Program her adimda bu iki deger arasinda rastgele bir milisaniye secer.
-- `Min` ve `Max` ayniysa sabit bekleme kullanilir.
-- Secilen gercek bekleme suresi loga yazilir.
-- `Baslamadan Once`: `F8` bastiktan sonra ilk aksiyondan once bekler.
-- `Aksiyon Arasi`: sag tik ile sol tik gibi ard arda gelen aksiyonlar arasinda bekler.
-- `Craft Sonrasi`: iteme tikladiktan sonra kontrol oncesi bekler.
-- `Inspect Oncesi`: mouse item noktasina geldikten sonra `Ctrl+C` oncesi bekler.
-- `Kisayol Sonrasi`: `Ctrl+C` gonderildikten sonra panoyu okumadan once bekler.
+Her item icin:
 
-## Guvenlik ve Durdurma
+1. Once alteration asamasi calisir.
+2. `Craft Ayarlari 1` ve `Craft Ayarlari 2` sekmelerindeki modlardan biri gelene kadar alteration denenir.
+3. Hedef mod bulunduktan sonra `Augment` noktasina bir kez sag tik yapar.
+4. Iteme bir kez sol tik yapar.
+5. Tekrar kontrol eder.
+6. Hem alteration tarafindaki modlardan biri, hem de `Augment` sekmesindeki modlardan biri varsa item tamamlanir.
+7. Yoksa alteration dongusu basa doner.
 
+## Item Tur Limiti
+
+`Item Tur Limiti` alani itemlar arasinda donmeli deneme yapmak icindir.
+
+Ornek:
+
+- deger `300` ise
+- bir item bu turda en fazla `300` sol tik alir
+- tamamlanmazsa siradaki itema gecer
+- tum itemler bir tur donunce tamamlanmayanlarla basa doner
+
+Bu sayede tek itemda takilip kalmaz.
+
+## Esik Mantigi
+
+Artik her mod satirinin kendi esik kutusu vardir.
+
+Kural:
+
+- Mod metninde `#` varsa, ayni satirdaki esik kutusundaki sayi kullanilir.
+- Mod metninde `#` yoksa, yanindaki kutu dikkate alinmaz.
+
+Ornek:
+
+- mod: `#% increased Evasion Rating during Effect`
+- esik: `55`
+
+Su degerler kabul edilir:
+
+- `55% increased Evasion Rating during Effect`
+- `56% increased Evasion Rating during Effect`
+- `60% increased Evasion Rating during Effect`
+
+Yani kural `>=` seklindedir.
+
+Eger secili bir modda `#` varsa ama o satirin esik kutusu bossa, `F8` ile baslatirken uygulama baslamaz ve logda uyari verir.
+
+## Arayuz Sekmeleri
+
+### Craft Ayarlari 1
+
+- `Aranan Mod 1-7`
+- her satirda:
+  - bir `combobox`
+  - bir esik kutusu
+- `Item Tur Limiti`
+- `Augment Akisi`
+- `Log Klasoru`
+- `Kopyala Goster`
+
+### Craft Ayarlari 2
+
+- `Aranan Mod 8-15`
+- her satirda:
+  - bir `combobox`
+  - bir esik kutusu
+
+### Augment
+
+- `Augment Mod 1-8`
+- her satirda:
+  - bir `combobox`
+  - bir esik kutusu
+
+### Zamanlama
+
+Tum beklemeler `Min/Max` araliginda rastgele secilir:
+
+- `Baslamadan Once`
+- `Aksiyon Arasi`
+- `Craft Sonrasi`
+- `Inspect Oncesi`
+- `Kisayol Sonrasi`
+
+### Noktalar
+
+- `F6` currency noktalarini sirayla kaydeder:
+  - ilk `F6`: `Alteration`
+  - ikinci `F6`: `Augment`
+  - sonra tekrar basa doner
+- `F7` her basista yeni item noktasi ekler
+- `Currencyleri Sifirla`
+- `Sonuncuyu Sil`
+- `Listeyi Temizle`
+
+Not:
+
+- `Item Noktalari` oturumluktur
+- program kapaninca item noktasi listesi sifirlanir
+- diger ayarlar kaydedilir
+
+### Kayitli Modlar
+
+Buraya eklenen modlar kalici olarak saklanir ve tum secim kutularinda gorunur.
+
+## Alt Butonlar
+
+- `Baslat (F8)`
+- `Durdur (F9)`
+- `Temizle`
+- `Kapat`
+
+`Temizle` sunlari yapar:
+
+- tum `Aranan Mod` secimlerini bosaltir
+- tum `Augment Mod` secimlerini bosaltir
+- tum esik kutularini temizler
+
+Ama sunlara dokunmaz:
+
+- kayitli mod listesi
+- currency noktalari
+- item noktalarindan oturum disi saklanan ayarlar
+
+## Kisa Yol Tuslari
+
+- `F6`: currency noktalarini sirayla kaydet
+- `F7`: yeni item noktasi ekle
 - `F8`: baslat
 - `F9`: durdur
 - `Esc`: aktif islemi durdur
-- `F6`: mevcut mouse konumunu `Currency Noktasi` olarak kaydet
-- `F7`: mevcut mouse konumunu item listesine yeni `Item Noktasi` olarak ekle
 
-Program calisirken sen fareyi hareket ettirirsen, tiklarsan veya klavyede bir tusa basarsan otomatik durur. Bu sayede islem devam ederken kontrolu geri alabilirsin. Uygulamayi kapatmak icin `Kapat` butonunu veya pencerenin carpı butonunu kullanabilirsin.
+Program calisirken sen:
+
+- fareyi hareket ettirirsen
+- fare ile tiklarsan
+- klavyede tusa basarsan
+
+otomatik durur.
 
 ## Loglama
 
-- Arayuzde `Log Klasoru` alani vardir.
-- `Klasor Sec` ile loglarin yazilacagi klasoru belirleyebilirsin.
-- `Kopyala Goster` kutusu aciksa manuel veya otomatik `Ctrl+C` ile gelen metinler de loga yazilir.
-- `F8` ile her yeni baslatmada tarih-saat adli yeni bir `.txt` dosyasi olusur.
-- Ekrandaki loglar ayni anda bu dosyaya da yazilir.
-- Her item bittiginde o item icin `sol tik` ve `sure` ozeti yazilir.
-- Islem dursa bile toplam item, toplam sol tik ve toplam sure ozeti yazilir.
-- Boylece sonradan hangi saatte ne oldugunu inceleyebilirsin.
+- `F8` ile her calistirmada secili klasorde tarih-saat adli yeni bir `.txt` dosyasi olusur.
+- Ekrandaki loglar ayni anda dosyaya da yazilir.
+- `Kopyala Goster` aciksa clipboard’a gelen metinler de loga yazilir.
+- Her item icin alteration, augment, toplam sol tik ve sure ozetlenir.
+- Tum islem sonunda genel ozet yazilir.
+
+Loglarda gorulebilecek onemli satirlar:
+
+- hangi akisin calistigi
+- hangi itemda olundugu
+- secilen bekleme suresi
+- bulunan eslesmeler
+- tur limiti doldu bilgisi
+- tamamlanan itemin listeden kaldirildigi bilgisi
+
+## Ayarlarin Kaydi
+
+Kalici olarak saklananlar:
+
+- secili `Aranan Mod` kutulari
+- secili `Augment Mod` kutulari
+- satir bazli esik kutulari
+- `Item Tur Limiti`
+- `Augment Akisi`
+- zamanlama degerleri
+- `Log Klasoru`
+- `Kopyala Goster`
+- currency noktalari
+- kayitli mod listesi
+
+Kalici olmayan:
+
+- item noktasi listesi
 
 ## Dogru Kullanim Icin Notlar
 
-- `Aranan Mod` icin tam satir yazmak en net sonuc verir, ama parcali metin de calisir.
-- Bos bir `Aranan Mod` satiri tamamen yok sayilir.
-- Sadece isaretli olan `Aranan Mod` satirlari kontrol edilir.
-- Buyuk-kucuk harf duyarliligi su an varsayilan olarak kapali, yani metin karsilastirmasi buyuk-kucuk harf farkina bakmaz.
-- `Ctrl+C` ile item bilgisinin gercekten panoya geldiginden once manuel test yapman iyi olur.
-- `F7` ile itemleri ekleme sirasi isleme sirasi olur.
-- Program sadece kaydettigin koordinatlara tiklar; pencere yer degisir veya arayuz kayarsa koordinatlari yeniden kaydetmen gerekir.
+- `Ctrl+C` ile item bilgisinin gercekten panoya geldigini once manuel denemek iyi olur.
+- Item penceresi veya oyun arayuzu yer degistirirse koordinatlari yeniden kaydetmek gerekir.
+- `Aranan Mod` ve `Augment Mod` satirlarinda bos olan kutular tamamen yok sayilir.
+- Item tamamlandiginda UI listesinden de silinir.
 
-## Calistirma
-
-```powershell
-$env:DOTNET_CLI_HOME='c:\Users\gamer\Desktop\crafter\.dotnet-home'
-dotnet run --project .\SystemAnalysis\SystemAnalysis.csproj
-```
-
-## Uygulamayi Debug'da Calistirmak Icin Yazilacaklar
+## Debug'da Calistirma
 
 ```powershell
 cd C:\Users\gamer\Desktop\crafter\SystemAnalysis
@@ -93,24 +225,28 @@ dotnet build
 .\bin\Debug\net10.0-windows\SystemAnalysis.exe
 ```
 
-Istersen dogrudan su yolu da calistirabilirsin:
+Dogrudan exe acmak istersen:
 
 ```powershell
 & "C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Debug\net10.0-windows\SystemAnalysis.exe"
 ```
 
-## Exe Uretme
+## Release Publish Alma
 
 ```powershell
-$env:DOTNET_CLI_HOME='c:\Users\gamer\Desktop\crafter\.dotnet-home'
+cd C:\Users\gamer\Desktop\crafter
+$env:DOTNET_CLI_HOME='C:\Users\gamer\Desktop\crafter\.dotnet-home'
+dotnet restore .\SystemAnalysis\SystemAnalysis.csproj -r win-x64
 dotnet publish .\SystemAnalysis\SystemAnalysis.csproj -c Release -r win-x64 --self-contained true
 ```
 
 Olusan exe:
 
-`bin\Release\net10.0-windows\win-x64\publish\SystemAnalysis.exe`
+```text
+C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Release\net10.0-windows\win-x64\publish\SystemAnalysis.exe
+```
 
-Dogrudan calistirmak icin:
+Release exe’yi acmak icin:
 
 ```powershell
 & "C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Release\net10.0-windows\win-x64\publish\SystemAnalysis.exe"
@@ -118,6 +254,15 @@ Dogrudan calistirmak icin:
 
 ## Repo Duzeni
 
-- Kaynak kodlar `SystemAnalysis/` klasorundedir.
-- Guncel publish kopyasi repo kokundeki `publish/win-x64/` klasorunde de tutulur.
-- `bin/` ve `obj/` gibi build klasorleri git'e eklenmez.
+- kaynak kodlar: `SystemAnalysis/`
+- guncel publish kopyasi: `publish/win-x64/`
+- debug/release build klasorleri: `bin/`, `obj/`
+
+## Hatirlatma
+
+Projeye geri dondugunde en hizli baslangic genelde su olur:
+
+1. Debug test icin `dotnet build` + debug exe
+2. Son kullanilan ayarlari kontrol et
+3. Item noktalarini yeniden sec
+4. Gerekirse release publish al

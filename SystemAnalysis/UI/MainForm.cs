@@ -20,9 +20,14 @@ public sealed class MainForm : Form
     private string _lastClipboardText = string.Empty;
 
     private readonly List<ComboBox> _matchRuleComboBoxes = new();
+    private readonly List<ComboBox> _augmentRuleComboBoxes = new();
+    private readonly List<TextBox> _matchRuleThresholdTextBoxes = new();
+    private readonly List<TextBox> _augmentRuleThresholdTextBoxes = new();
     private readonly ComboBox _modeComboBox;
-    private readonly TextBox _percentageThresholdTextBox;
-    private readonly Label _sourceLabel;
+    private readonly CheckBox _useAugmentCycleCheckBox;
+    private readonly NumericUpDown _maxClicksPerItemRoundInput;
+    private readonly Label _nextCurrencyCaptureLabel;
+    private readonly ListBox _currencyPointsListBox;
     private readonly Label _targetLabel;
     private readonly ListBox _targetPointsListBox;
     private readonly ListBox _savedModsListBox;
@@ -42,6 +47,8 @@ public sealed class MainForm : Form
     private readonly Button _startButton;
     private readonly Button _stopButton;
     private readonly TextBox _logTextBox;
+    private PointKind _nextCurrencyCaptureKind = PointKind.Source;
+    private bool _isRefreshingUi;
 
     public MainForm(string configPath, AppConfig config)
     {
@@ -75,6 +82,7 @@ public sealed class MainForm : Form
 
         var settingsTab = CreateTabPage("Craft Ayarlari 1");
         var settingsTabTwo = CreateTabPage("Craft Ayarlari 2");
+        var augmentTab = CreateTabPage("Augment");
         var timingTab = CreateTabPage("Zamanlama");
         var pointsTab = CreateTabPage("Noktalar");
         var modsTab = CreateTabPage("Kayitli Modlar");
@@ -108,24 +116,29 @@ public sealed class MainForm : Form
         _modeComboBox.Items.Add(new ModeOption("hold_shift_spam", "Shift Basili Tekrarli Tiklama"));
         SelectMode();
 
-        settingsGrid.Controls.Add(new Label { Text = "Yuzde Esigi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 7);
-        var thresholdPanel = new FlowLayoutPanel
+        settingsGrid.Controls.Add(new Label { Text = "Item Tur Limiti", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 7);
+        _maxClicksPerItemRoundInput = new NumericUpDown
         {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false
+            Minimum = 1,
+            Maximum = 10000,
+            Increment = 10,
+            Value = Math.Max(1, Math.Min(_config.MaxClicksPerItemRound, 10000)),
+            Width = 100
         };
-        _percentageThresholdTextBox = new TextBox
-        {
-            Width = 80,
-            Text = _config.ClipboardCheck.PercentageThresholdText
-        };
-        _percentageThresholdTextBox.TextChanged += (_, _) => SaveUiToConfig();
-        thresholdPanel.Controls.Add(_percentageThresholdTextBox);
-        settingsGrid.Controls.Add(thresholdPanel, 1, 7);
+        _maxClicksPerItemRoundInput.ValueChanged += (_, _) => SaveUiToConfig();
+        settingsGrid.Controls.Add(_maxClicksPerItemRoundInput, 1, 7);
 
-        settingsGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 8);
+        settingsGrid.Controls.Add(new Label { Text = "Augment Akisi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 8);
+        _useAugmentCycleCheckBox = new CheckBox
+        {
+            AutoSize = true,
+            Checked = _config.ClipboardCheck.UseAugmentCycle,
+            Text = "Flask icin alteration sonrasi augment uygula"
+        };
+        _useAugmentCycleCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
+        settingsGrid.Controls.Add(_useAugmentCycleCheckBox, 1, 8);
+
+        settingsGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 9);
         var logPathPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -139,9 +152,9 @@ public sealed class MainForm : Form
         var chooseLogFolderButton = new Button { Text = "Klasor Sec", AutoSize = true };
         chooseLogFolderButton.Click += (_, _) => ChooseLogDirectory();
         logPathPanel.Controls.Add(chooseLogFolderButton, 1, 0);
-        settingsGrid.Controls.Add(logPathPanel, 1, 8);
+        settingsGrid.Controls.Add(logPathPanel, 1, 9);
 
-        settingsGrid.Controls.Add(new Label { Text = "Kopyala Goster", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 9);
+        settingsGrid.Controls.Add(new Label { Text = "Kopyala Goster", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 10);
         _showCopiedTextCheckBox = new CheckBox
         {
             AutoSize = true,
@@ -149,7 +162,7 @@ public sealed class MainForm : Form
             Text = "Kopyalanan metni logla"
         };
         _showCopiedTextCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
-        settingsGrid.Controls.Add(_showCopiedTextCheckBox, 1, 9);
+        settingsGrid.Controls.Add(_showCopiedTextCheckBox, 1, 10);
 
         settingsGroup.Controls.Add(settingsGrid);
 
@@ -172,6 +185,34 @@ public sealed class MainForm : Form
         settingsGridTwo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         AddMatchRuleRows(settingsGridTwo, 7, 8);
         settingsGroupTwo.Controls.Add(settingsGridTwo);
+
+        var augmentGroup = new GroupBox
+        {
+            Dock = DockStyle.Top,
+            Text = "Augment Hedefleri",
+            AutoSize = true,
+            Width = 970
+        };
+
+        var augmentGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 2,
+            AutoSize = true
+        };
+        augmentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
+        augmentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        augmentGrid.Controls.Add(new Label
+        {
+            Text = "Bu sekmedeki modlardan herhangi biri, alteration ile bulunan modun yanina geldiyse item tamam sayilir.",
+            AutoSize = true,
+            MaximumSize = new Size(760, 0)
+        }, 1, 0);
+
+        AddAugmentRuleRows(augmentGrid, 0, 8, 1);
+        augmentGroup.Controls.Add(augmentGrid);
 
         var timingGroup = new GroupBox
         {
@@ -265,12 +306,39 @@ public sealed class MainForm : Form
         pointsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         pointsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
 
-        pointsGrid.Controls.Add(new Label { Text = "Currency Noktasi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
-        _sourceLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
-        pointsGrid.Controls.Add(_sourceLabel, 1, 0);
-        var captureSourceButton = new Button { Text = "Mouse'tan Kaydet (F6)", AutoSize = true, Anchor = AnchorStyles.Right };
-        captureSourceButton.Click += (_, _) => CapturePoint(PointKind.Source);
-        pointsGrid.Controls.Add(captureSourceButton, 2, 0);
+        pointsGrid.Controls.Add(new Label { Text = "Currency Noktalari", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
+        var currencyPointsPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            AutoSize = true
+        };
+        _nextCurrencyCaptureLabel = new Label { AutoSize = true };
+        _currencyPointsListBox = new ListBox
+        {
+            Dock = DockStyle.Top,
+            Height = 72,
+            IntegralHeight = false
+        };
+        currencyPointsPanel.Controls.Add(_nextCurrencyCaptureLabel, 0, 0);
+        currencyPointsPanel.Controls.Add(_currencyPointsListBox, 0, 1);
+        pointsGrid.Controls.Add(currencyPointsPanel, 1, 0);
+
+        var currencyButtonsPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true
+        };
+        var captureCurrencyButton = new Button { Text = "Mouse'tan Kaydet (F6)", AutoSize = true, Anchor = AnchorStyles.Right };
+        captureCurrencyButton.Click += (_, _) => CapturePoint(PointKind.Source);
+        currencyButtonsPanel.Controls.Add(captureCurrencyButton);
+
+        var resetCurrencyButton = new Button { Text = "Currencyleri Sifirla", AutoSize = true };
+        resetCurrencyButton.Click += (_, _) => ResetCurrencyPoints();
+        currencyButtonsPanel.Controls.Add(resetCurrencyButton);
+        pointsGrid.Controls.Add(currencyButtonsPanel, 2, 0);
 
         pointsGrid.Controls.Add(new Label { Text = "Item Noktalari", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 1);
         var itemPointsPanel = new TableLayoutPanel
@@ -401,13 +469,17 @@ public sealed class MainForm : Form
         _stopButton.Click += (_, _) => StopCurrentRun("Durdurma istendi.");
         actionsPanel.Controls.Add(_stopButton);
 
+        var clearMatchRulesButton = new Button { Text = "Temizle", AutoSize = true };
+        clearMatchRulesButton.Click += (_, _) => ClearSelectedMatchRules();
+        actionsPanel.Controls.Add(clearMatchRulesButton);
+
         var closeButton = new Button { Text = "Kapat", AutoSize = true };
         closeButton.Click += (_, _) => Close();
         actionsPanel.Controls.Add(closeButton);
 
         var helpLabel = new Label
         {
-            Text = "F6 currency noktasini kaydeder. F7 her basista yeni item noktasi ekler. Esc dahil fare veya klavye hareketi islemi durdurur.",
+            Text = "F6 currency noktalarini sirayla kaydeder. F7 her basista yeni item noktasi ekler. Esc dahil fare veya klavye hareketi islemi durdurur.",
             AutoSize = true,
             Margin = new Padding(18, 8, 0, 0)
         };
@@ -431,11 +503,13 @@ public sealed class MainForm : Form
 
         ((Panel)settingsTab.Controls[0]).Controls.Add(settingsGroup);
         ((Panel)settingsTabTwo.Controls[0]).Controls.Add(settingsGroupTwo);
+        ((Panel)augmentTab.Controls[0]).Controls.Add(augmentGroup);
         ((Panel)timingTab.Controls[0]).Controls.Add(timingGroup);
         ((Panel)pointsTab.Controls[0]).Controls.Add(pointsGroup);
         ((Panel)modsTab.Controls[0]).Controls.Add(modsGroup);
         tabs.TabPages.Add(settingsTab);
         tabs.TabPages.Add(settingsTabTwo);
+        tabs.TabPages.Add(augmentTab);
         tabs.TabPages.Add(timingTab);
         tabs.TabPages.Add(pointsTab);
         tabs.TabPages.Add(modsTab);
@@ -461,6 +535,7 @@ public sealed class MainForm : Form
             }
         };
 
+        _nextCurrencyCaptureKind = DetermineNextCurrencyCaptureKind();
         RefreshPointLabels();
         RefreshSavedModsUi();
         HookMonitorEvents();
@@ -505,17 +580,50 @@ public sealed class MainForm : Form
                 return;
             }
 
+            if (IsUnset(_config.SourcePoint))
+            {
+                AppendLog("Once alteration noktasini kaydetmelisin.");
+                return;
+            }
+
+            if (_useAugmentCycleCheckBox.Checked && IsUnset(_config.SecondarySourcePoint))
+            {
+                AppendLog("Augment akisi aciksa once augment noktasini kaydetmelisin.");
+                return;
+            }
+
+            if (_useAugmentCycleCheckBox.Checked && !_config.ClipboardCheck.GetActiveAugmentRules().Any())
+            {
+                AppendLog("Augment akisi aciksa augment sekmesinden en az bir mod secmelisin.");
+                return;
+            }
+
+            var selectedRules = _config.ClipboardCheck.GetActiveRules()
+                .Concat(_config.ClipboardCheck.GetActiveAugmentRules())
+                .ToList();
+            var hasThresholdRuleWithoutValue = selectedRules.Any(rule => rule.Text.Contains('#') && string.IsNullOrWhiteSpace(rule.ThresholdText));
+            if (hasThresholdRuleWithoutValue)
+            {
+                AppendLog("Secili modlardan birinde '#' kullaniliyor. O modun yanindaki esik kutusunu doldurmalisin.");
+                return;
+            }
+
+            var useAugmentCycle = _useAugmentCycleCheckBox.Checked
+                                  && !IsUnset(_config.SecondarySourcePoint)
+                                  && _config.ClipboardCheck.GetActiveAugmentRules().Any();
+            _config.ClipboardCheck.UseAugmentCycle = useAugmentCycle;
+
             _runCancellation = new CancellationTokenSource();
             PrepareRunLogFile();
             _monitor.IsArmed = true;
             SetRunningState(true);
-            AppendLog("Baslatma istendi.");
+            AppendLog($"Baslatma istendi. Calisacak akis: {(useAugmentCycle ? "Alteration + Augment" : "Sadece Alteration")}");
 
             _currentRun = Task.Run(async () =>
             {
                 try
                 {
-                    var runner = new AnalysisRunner(_config, AppendLogThreadSafe);
+                    var runner = new AnalysisRunner(_config, AppendLogThreadSafe, point => InvokeOnUi(() => RemoveCompletedTargetPoint(point)));
                     await runner.RunAsync(_runCancellation.Token);
                 }
                 catch (OperationCanceledException)
@@ -559,13 +667,27 @@ public sealed class MainForm : Form
 
     private void SaveUiToConfig()
     {
+        if (_isRefreshingUi)
+        {
+            return;
+        }
+
         for (var i = 0; i < _config.ClipboardCheck.MatchRules.Count && i < _matchRuleComboBoxes.Count; i++)
         {
             _config.ClipboardCheck.MatchRules[i].Text = _matchRuleComboBoxes[i].SelectedItem?.ToString()?.Trim() ?? string.Empty;
             _config.ClipboardCheck.MatchRules[i].Enabled = !string.IsNullOrWhiteSpace(_config.ClipboardCheck.MatchRules[i].Text);
+            _config.ClipboardCheck.MatchRules[i].ThresholdText = _matchRuleThresholdTextBoxes[i].Text.Trim();
         }
 
-        _config.ClipboardCheck.PercentageThresholdText = _percentageThresholdTextBox.Text.Trim();
+        for (var i = 0; i < _config.ClipboardCheck.AugmentMatchRules.Count && i < _augmentRuleComboBoxes.Count; i++)
+        {
+            _config.ClipboardCheck.AugmentMatchRules[i].Text = _augmentRuleComboBoxes[i].SelectedItem?.ToString()?.Trim() ?? string.Empty;
+            _config.ClipboardCheck.AugmentMatchRules[i].Enabled = !string.IsNullOrWhiteSpace(_config.ClipboardCheck.AugmentMatchRules[i].Text);
+            _config.ClipboardCheck.AugmentMatchRules[i].ThresholdText = _augmentRuleThresholdTextBoxes[i].Text.Trim();
+        }
+
+        _config.ClipboardCheck.UseAugmentCycle = _useAugmentCycleCheckBox.Checked;
+        _config.MaxClicksPerItemRound = Decimal.ToInt32(_maxClicksPerItemRoundInput.Value);
 
         var firstActiveRule = _config.ClipboardCheck.GetActiveRules().FirstOrDefault();
         _config.ClipboardCheck.MustContain = firstActiveRule?.Text ?? string.Empty;
@@ -593,9 +715,7 @@ public sealed class MainForm : Form
         switch (pointKind)
         {
             case PointKind.Source:
-                _config.SourcePoint.X = x;
-                _config.SourcePoint.Y = y;
-                AppendLog($"Currency noktasi kaydedildi: {x}, {y}");
+                CaptureCurrencyPoint(x, y);
                 break;
             case PointKind.Target:
                 _config.TargetPoints.Add(new PointConfig { X = x, Y = y });
@@ -638,7 +758,15 @@ public sealed class MainForm : Form
 
     private void RefreshPointLabels()
     {
-        _sourceLabel.Text = FormatPoint(_config.SourcePoint);
+        _currencyPointsListBox.BeginUpdate();
+        _currencyPointsListBox.Items.Clear();
+        _currencyPointsListBox.Items.Add($"1. Alteration: {FormatPoint(_config.SourcePoint)}");
+        _currencyPointsListBox.Items.Add($"2. Augment: {FormatPoint(_config.SecondarySourcePoint)}");
+        _currencyPointsListBox.EndUpdate();
+
+        _nextCurrencyCaptureLabel.Text = _nextCurrencyCaptureKind == PointKind.Source
+            ? "Siradaki F6: Alteration noktasi"
+            : "Siradaki F6: Augment noktasi";
         _targetLabel.Text = $"{_config.TargetPoints.Count} item noktasi secili";
 
         _targetPointsListBox.BeginUpdate();
@@ -652,43 +780,122 @@ public sealed class MainForm : Form
         _targetPointsListBox.EndUpdate();
     }
 
+    private void RemoveCompletedTargetPoint(PointConfig completedPoint)
+    {
+        var index = _config.TargetPoints.FindIndex(point => point.X == completedPoint.X && point.Y == completedPoint.Y);
+        if (index < 0)
+        {
+            return;
+        }
+
+        _config.TargetPoints.RemoveAt(index);
+        RefreshPointLabels();
+        AppendLog($"Tamamlanan item listeden kaldirildi: {FormatPoint(completedPoint)}");
+    }
+
+    private void CaptureCurrencyPoint(int x, int y)
+    {
+        if (_nextCurrencyCaptureKind == PointKind.Source)
+        {
+            _config.SourcePoint.X = x;
+            _config.SourcePoint.Y = y;
+            AppendLog($"Alteration noktasi kaydedildi: {x}, {y}");
+            _nextCurrencyCaptureKind = PointKind.SecondarySource;
+        }
+        else
+        {
+            _config.SecondarySourcePoint.X = x;
+            _config.SecondarySourcePoint.Y = y;
+            AppendLog($"Augment noktasi kaydedildi: {x}, {y}");
+            _nextCurrencyCaptureKind = PointKind.Source;
+        }
+    }
+
+    private void ResetCurrencyPoints()
+    {
+        _config.SourcePoint = new PointConfig();
+        _config.SecondarySourcePoint = new PointConfig();
+        _nextCurrencyCaptureKind = PointKind.Source;
+        ConfigLoader.Save(_configPath, _config);
+        RefreshPointLabels();
+        AppendLog("Currency noktalari sifirlandi.");
+    }
+
     private void RefreshSavedModsUi()
     {
-        _savedModsListBox.BeginUpdate();
-        _savedModsListBox.Items.Clear();
-        foreach (var savedMod in _config.SavedMods)
-        {
-            _savedModsListBox.Items.Add(savedMod);
-        }
-        _savedModsListBox.EndUpdate();
+        _isRefreshingUi = true;
 
-        for (var i = 0; i < _matchRuleComboBoxes.Count; i++)
+        try
         {
-            var comboBox = _matchRuleComboBoxes[i];
-            var selectedText = _config.ClipboardCheck.MatchRules[i].Text;
-            comboBox.BeginUpdate();
-            comboBox.Items.Clear();
-            comboBox.Items.Add(string.Empty);
+            _savedModsListBox.BeginUpdate();
+            _savedModsListBox.Items.Clear();
             foreach (var savedMod in _config.SavedMods)
             {
-                comboBox.Items.Add(savedMod);
+                _savedModsListBox.Items.Add(savedMod);
             }
+            _savedModsListBox.EndUpdate();
 
-            var selectedIndex = 0;
-            if (!string.IsNullOrWhiteSpace(selectedText))
+            for (var i = 0; i < _matchRuleComboBoxes.Count; i++)
             {
-                for (var itemIndex = 0; itemIndex < comboBox.Items.Count; itemIndex++)
+                var comboBox = _matchRuleComboBoxes[i];
+                var selectedText = _config.ClipboardCheck.MatchRules[i].Text;
+                comboBox.BeginUpdate();
+                comboBox.Items.Clear();
+                comboBox.Items.Add(string.Empty);
+                foreach (var savedMod in _config.SavedMods)
                 {
-                    if (string.Equals(comboBox.Items[itemIndex]?.ToString(), selectedText, StringComparison.OrdinalIgnoreCase))
+                    comboBox.Items.Add(savedMod);
+                }
+
+                var selectedIndex = 0;
+                if (!string.IsNullOrWhiteSpace(selectedText))
+                {
+                    for (var itemIndex = 0; itemIndex < comboBox.Items.Count; itemIndex++)
                     {
-                        selectedIndex = itemIndex;
-                        break;
+                        if (string.Equals(comboBox.Items[itemIndex]?.ToString(), selectedText, StringComparison.OrdinalIgnoreCase))
+                        {
+                            selectedIndex = itemIndex;
+                            break;
+                        }
                     }
                 }
+
+                comboBox.SelectedIndex = selectedIndex;
+                comboBox.EndUpdate();
             }
 
-            comboBox.SelectedIndex = selectedIndex;
-            comboBox.EndUpdate();
+            for (var i = 0; i < _augmentRuleComboBoxes.Count; i++)
+            {
+                var comboBox = _augmentRuleComboBoxes[i];
+                var selectedText = _config.ClipboardCheck.AugmentMatchRules[i].Text;
+                comboBox.BeginUpdate();
+                comboBox.Items.Clear();
+                comboBox.Items.Add(string.Empty);
+                foreach (var savedMod in _config.SavedMods)
+                {
+                    comboBox.Items.Add(savedMod);
+                }
+
+                var selectedIndex = 0;
+                if (!string.IsNullOrWhiteSpace(selectedText))
+                {
+                    for (var itemIndex = 0; itemIndex < comboBox.Items.Count; itemIndex++)
+                    {
+                        if (string.Equals(comboBox.Items[itemIndex]?.ToString(), selectedText, StringComparison.OrdinalIgnoreCase))
+                        {
+                            selectedIndex = itemIndex;
+                            break;
+                        }
+                    }
+                }
+
+                comboBox.SelectedIndex = selectedIndex;
+                comboBox.EndUpdate();
+            }
+        }
+        finally
+        {
+            _isRefreshingUi = false;
         }
     }
 
@@ -730,6 +937,12 @@ public sealed class MainForm : Form
             rule.Enabled = false;
         }
 
+        foreach (var rule in _config.ClipboardCheck.AugmentMatchRules.Where(rule => string.Equals(rule.Text, selectedMod, StringComparison.OrdinalIgnoreCase)))
+        {
+            rule.Text = string.Empty;
+            rule.Enabled = false;
+        }
+
         _config.Normalize();
         RefreshSavedModsUi();
         SaveUiToConfig();
@@ -751,9 +964,41 @@ public sealed class MainForm : Form
             rule.Enabled = false;
         }
 
+        foreach (var rule in _config.ClipboardCheck.AugmentMatchRules)
+        {
+            rule.Text = string.Empty;
+            rule.Enabled = false;
+        }
+
         RefreshSavedModsUi();
         SaveUiToConfig();
         AppendLog("Kayitli mod listesi temizlendi.");
+    }
+
+    private void ClearSelectedMatchRules()
+    {
+        foreach (var comboBox in _matchRuleComboBoxes)
+        {
+            comboBox.SelectedIndex = 0;
+        }
+
+        foreach (var textBox in _matchRuleThresholdTextBoxes)
+        {
+            textBox.Clear();
+        }
+
+        foreach (var comboBox in _augmentRuleComboBoxes)
+        {
+            comboBox.SelectedIndex = 0;
+        }
+
+        foreach (var textBox in _augmentRuleThresholdTextBoxes)
+        {
+            textBox.Clear();
+        }
+
+        SaveUiToConfig();
+        AppendLog("Aranan ve augment mod secimleri temizlendi.");
     }
 
     private void SetRunningState(bool isRunning)
@@ -819,6 +1064,7 @@ public sealed class MainForm : Form
         Directory.CreateDirectory(directory);
         _currentLogFilePath = Path.Combine(directory, $"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt");
         var activeRules = _config.ClipboardCheck.GetActiveRules().Select(rule => rule.Text).ToList();
+        var activeAugmentRules = _config.ClipboardCheck.GetActiveAugmentRules().Select(rule => rule.Text).ToList();
         var targetPointsText = _config.TargetPoints.Count == 0
             ? "Secili item noktasi yok"
             : string.Join(", ", _config.TargetPoints.Select((point, index) => $"{index + 1}. {FormatPoint(point)}"));
@@ -826,8 +1072,12 @@ public sealed class MainForm : Form
         var header = new StringBuilder()
             .AppendLine($"SystemAnalysis log basladi: {DateTime.Now:yyyy-MM-dd HH:mm:ss}")
             .AppendLine($"Mod: {_config.Mode}")
-            .AppendLine($"Aranan Modlar: {(activeRules.Count == 0 ? "Aktif aranan mod yok" : string.Join(" | ", activeRules))}")
-            .AppendLine($"Currency Noktasi: {FormatPoint(_config.SourcePoint)}")
+            .AppendLine($"Alteration Modlari: {(activeRules.Count == 0 ? "Aktif aranan mod yok" : string.Join(" | ", activeRules))}")
+            .AppendLine($"Augment Modlari: {(activeAugmentRules.Count == 0 ? "Aktif augment modu yok" : string.Join(" | ", activeAugmentRules))}")
+            .AppendLine($"Item Tur Limiti: {_config.MaxClicksPerItemRound}")
+            .AppendLine($"Alteration Noktasi: {FormatPoint(_config.SourcePoint)}")
+            .AppendLine($"Augment Akisi: {(_config.ClipboardCheck.UseAugmentCycle ? "Acik" : "Kapali")}")
+            .AppendLine($"Augment Noktasi: {FormatPoint(_config.SecondarySourcePoint)}")
             .AppendLine($"Item Noktalari: {targetPointsText}")
             .AppendLine(new string('-', 48))
             .ToString();
@@ -942,10 +1192,11 @@ public sealed class MainForm : Form
             var rulePanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 1,
+                ColumnCount = 2,
                 AutoSize = true
             };
             rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
 
             var ruleComboBox = new ComboBox
             {
@@ -955,7 +1206,62 @@ public sealed class MainForm : Form
             ruleComboBox.SelectedIndexChanged += (_, _) => SaveUiToConfig();
             _matchRuleComboBoxes.Add(ruleComboBox);
             rulePanel.Controls.Add(ruleComboBox, 0, 0);
+
+            var thresholdTextBox = new TextBox
+            {
+                Dock = DockStyle.Top,
+                Width = 60,
+                Text = rule.ThresholdText
+            };
+            thresholdTextBox.TextChanged += (_, _) => SaveUiToConfig();
+            _matchRuleThresholdTextBoxes.Add(thresholdTextBox);
+            rulePanel.Controls.Add(thresholdTextBox, 1, 0);
             grid.Controls.Add(rulePanel, 1, offset);
+        }
+    }
+
+    private void AddAugmentRuleRows(TableLayoutPanel grid, int startIndex, int count, int rowOffset)
+    {
+        for (var offset = 0; offset < count; offset++)
+        {
+            var matchRuleIndex = startIndex + offset;
+            var row = rowOffset + offset;
+            grid.Controls.Add(new Label
+            {
+                Text = $"Augment Mod {matchRuleIndex + 1}",
+                AutoSize = true,
+                Anchor = AnchorStyles.Left
+            }, 0, row);
+
+            var comboBox = new ComboBox
+            {
+                Dock = DockStyle.Top,
+                DropDownStyle = ComboBoxStyle.DropDownList
+            };
+            comboBox.SelectedIndexChanged += (_, _) => SaveUiToConfig();
+            _augmentRuleComboBoxes.Add(comboBox);
+
+            var rowPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                AutoSize = true
+            };
+            rowPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            rowPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+            rowPanel.Controls.Add(comboBox, 0, 0);
+
+            var thresholdTextBox = new TextBox
+            {
+                Dock = DockStyle.Top,
+                Width = 60,
+                Text = _config.ClipboardCheck.AugmentMatchRules[matchRuleIndex].ThresholdText
+            };
+            thresholdTextBox.TextChanged += (_, _) => SaveUiToConfig();
+            _augmentRuleThresholdTextBoxes.Add(thresholdTextBox);
+            rowPanel.Controls.Add(thresholdTextBox, 1, 0);
+
+            grid.Controls.Add(rowPanel, 1, row);
         }
     }
 
@@ -976,7 +1282,28 @@ public sealed class MainForm : Form
     private enum PointKind
     {
         Source,
+        SecondarySource,
         Target
+    }
+
+    private static bool IsUnset(PointConfig point)
+    {
+        return point.X == 0 && point.Y == 0;
+    }
+
+    private PointKind DetermineNextCurrencyCaptureKind()
+    {
+        if (IsUnset(_config.SourcePoint))
+        {
+            return PointKind.Source;
+        }
+
+        if (IsUnset(_config.SecondarySourcePoint))
+        {
+            return PointKind.SecondarySource;
+        }
+
+        return PointKind.Source;
     }
 
     private sealed record ModeOption(string Value, string Label)

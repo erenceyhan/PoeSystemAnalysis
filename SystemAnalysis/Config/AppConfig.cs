@@ -5,7 +5,9 @@ namespace SystemAnalysis.Config;
 public sealed class AppConfig
 {
     public string Mode { get; set; } = "hold_shift_spam";
+    public int MaxClicksPerItemRound { get; set; } = 300;
     public PointConfig SourcePoint { get; set; } = new();
+    public PointConfig SecondarySourcePoint { get; set; } = new();
     public PointConfig TargetPoint { get; set; } = new();
     public PointConfig InspectPoint { get; set; } = new();
     [JsonIgnore]
@@ -32,6 +34,7 @@ public sealed class AppConfig
             .ToList();
 
         foreach (var ruleText in ClipboardCheck.MatchRules
+                     .Concat(ClipboardCheck.AugmentMatchRules)
                      .Where(rule => !string.IsNullOrWhiteSpace(rule.Text))
                      .Select(rule => rule.Text.Trim()))
         {
@@ -46,6 +49,7 @@ public sealed class AppConfig
             .OrderBy(mod => mod, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        MaxClicksPerItemRound = Math.Max(1, MaxClicksPerItemRound);
         TargetPoints ??= new List<PointConfig>();
     }
 }
@@ -59,10 +63,12 @@ public sealed class PointConfig
 public sealed class ClipboardCheckConfig
 {
     public string TriggerShortcut { get; set; } = "ctrl+alt+c";
-    public string MustContain { get; set; } = "wanted_mod";
+    public string MustContain { get; set; } = string.Empty;
     public bool CaseSensitive { get; set; }
+    public bool UseAugmentCycle { get; set; }
     public string PercentageThresholdText { get; set; } = string.Empty;
     public List<MatchRule> MatchRules { get; set; } = CreateDefaultRules();
+    public List<MatchRule> AugmentMatchRules { get; set; } = CreateDefaultAugmentRules();
 
     public IEnumerable<MatchRule> GetActiveRules()
     {
@@ -83,6 +89,13 @@ public sealed class ClipboardCheckConfig
         return Array.Empty<MatchRule>();
     }
 
+    public IEnumerable<MatchRule> GetActiveAugmentRules()
+    {
+        return AugmentMatchRules
+            .Where(rule => !string.IsNullOrWhiteSpace(rule.Text))
+            .ToList();
+    }
+
     public void Normalize()
     {
         if (MatchRules is null || MatchRules.Count == 0)
@@ -94,13 +107,31 @@ public sealed class ClipboardCheckConfig
         {
             MatchRules.Add(new MatchRule());
         }
+
+        if (AugmentMatchRules is null || AugmentMatchRules.Count == 0)
+        {
+            AugmentMatchRules = CreateDefaultAugmentRules();
+        }
+
+        while (AugmentMatchRules.Count < 8)
+        {
+            AugmentMatchRules.Add(new MatchRule());
+        }
+
+        foreach (var rule in MatchRules.Concat(AugmentMatchRules))
+        {
+            if (string.IsNullOrWhiteSpace(rule.ThresholdText) && rule.Text.Contains('#') && !string.IsNullOrWhiteSpace(PercentageThresholdText))
+            {
+                rule.ThresholdText = PercentageThresholdText.Trim();
+            }
+        }
     }
 
     private static List<MatchRule> CreateDefaultRules()
     {
         return new List<MatchRule>
         {
-            new() { Enabled = true, Text = "wanted_mod" },
+            new(),
             new(),
             new(),
             new(),
@@ -117,12 +148,28 @@ public sealed class ClipboardCheckConfig
             new()
         };
     }
+
+    private static List<MatchRule> CreateDefaultAugmentRules()
+    {
+        return new List<MatchRule>
+        {
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new()
+        };
+    }
 }
 
 public sealed class MatchRule
 {
     public bool Enabled { get; set; }
     public string Text { get; set; } = string.Empty;
+    public string ThresholdText { get; set; } = string.Empty;
 }
 
 public sealed class TimingConfig
