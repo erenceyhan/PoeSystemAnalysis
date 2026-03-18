@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Media;
+using System.Text.RegularExpressions;
 using SystemAnalysis.Config;
 using SystemAnalysis.Interop;
 
@@ -131,19 +132,91 @@ public sealed class AnalysisRunner
             : StringComparison.OrdinalIgnoreCase;
 
         var rules = _config.ClipboardCheck.GetActiveRules().ToList();
-        var matchedRule = rules.FirstOrDefault(rule => currentText.Contains(rule.Text, comparison));
+        var matchedRule = rules.FirstOrDefault(rule => IsRuleMatch(rule, currentText, comparison, out _));
 
         if (matchedRule is not null)
         {
-            Log($"Item {item.Index}: Eslesme bulundu: '{matchedRule.Text}'");
+            IsRuleMatch(matchedRule, currentText, comparison, out var matchedText);
+            Log($"Item {item.Index}: Eslesme bulundu: '{matchedText}'");
             return true;
         }
 
         var activeText = rules.Count == 0
             ? "Aktif aranan mod yok"
-            : string.Join(" | ", rules.Select(rule => rule.Text));
+            : string.Join(" | ", rules.Select(FormatRuleForLog));
         Log($"Item {item.Index}: Eslesme yok. Aranan ifadeler: '{activeText}'");
         return false;
+    }
+
+    private bool IsRuleMatch(MatchRule rule, string currentText, StringComparison comparison, out string matchedText)
+    {
+        matchedText = rule.Text;
+
+        if (string.IsNullOrWhiteSpace(rule.Text))
+        {
+            return false;
+        }
+
+        if (!rule.Text.Contains('#'))
+        {
+            return currentText.Contains(rule.Text, comparison);
+        }
+
+        if (!int.TryParse(_config.ClipboardCheck.PercentageThresholdText, out var minimumPercentage))
+        {
+            return false;
+        }
+
+        var match = TryMatchFlaskRule(rule.Text, currentText, minimumPercentage, comparison, out matchedText);
+        return match;
+    }
+
+    private static bool TryMatchFlaskRule(string template, string currentText, int minimumPercentage, StringComparison comparison, out string matchedText)
+    {
+        matchedText = template;
+
+        var split = template.Split('#');
+        if (split.Length != 2)
+        {
+            return currentText.Contains(template, comparison);
+        }
+
+        var prefix = split[0];
+        var suffix = split[1];
+        var regexPattern = $"{Regex.Escape(prefix)}(?<value>\\d+){Regex.Escape(suffix)}";
+        var options = comparison == StringComparison.OrdinalIgnoreCase
+            ? RegexOptions.IgnoreCase
+            : RegexOptions.None;
+        var regex = new Regex(regexPattern, options);
+        var match = regex.Match(currentText);
+
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        if (!int.TryParse(match.Groups["value"].Value, out var actualPercentage))
+        {
+            return false;
+        }
+
+        if (actualPercentage < minimumPercentage)
+        {
+            return false;
+        }
+
+        matchedText = match.Value;
+        return true;
+    }
+
+    private string FormatRuleForLog(MatchRule rule)
+    {
+        if (rule.Text.Contains('#') && int.TryParse(_config.ClipboardCheck.PercentageThresholdText, out var minimumPercentage))
+        {
+            return $"{rule.Text} (Esik >= {minimumPercentage})";
+        }
+
+        return rule.Text;
     }
 
     private void TriggerClipboardShortcut()

@@ -61,12 +61,13 @@ public sealed class ClipboardCheckConfig
     public string TriggerShortcut { get; set; } = "ctrl+alt+c";
     public string MustContain { get; set; } = "wanted_mod";
     public bool CaseSensitive { get; set; }
+    public string PercentageThresholdText { get; set; } = string.Empty;
     public List<MatchRule> MatchRules { get; set; } = CreateDefaultRules();
 
     public IEnumerable<MatchRule> GetActiveRules()
     {
         var rules = MatchRules
-            .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.Text))
+            .Where(rule => !string.IsNullOrWhiteSpace(rule.Text))
             .ToList();
 
         if (rules.Count > 0)
@@ -89,7 +90,7 @@ public sealed class ClipboardCheckConfig
             MatchRules = CreateDefaultRules();
         }
 
-        while (MatchRules.Count < 5)
+        while (MatchRules.Count < 15)
         {
             MatchRules.Add(new MatchRule());
         }
@@ -100,6 +101,16 @@ public sealed class ClipboardCheckConfig
         return new List<MatchRule>
         {
             new() { Enabled = true, Text = "wanted_mod" },
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
             new(),
             new(),
             new(),

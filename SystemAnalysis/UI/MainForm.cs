@@ -19,9 +19,9 @@ public sealed class MainForm : Form
     private string? _currentLogFilePath;
     private string _lastClipboardText = string.Empty;
 
-    private readonly List<CheckBox> _matchRuleCheckBoxes = new();
     private readonly List<ComboBox> _matchRuleComboBoxes = new();
     private readonly ComboBox _modeComboBox;
+    private readonly TextBox _percentageThresholdTextBox;
     private readonly Label _sourceLabel;
     private readonly Label _targetLabel;
     private readonly ListBox _targetPointsListBox;
@@ -73,7 +73,8 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill
         };
 
-        var settingsTab = CreateTabPage("Craft Ayarlari");
+        var settingsTab = CreateTabPage("Craft Ayarlari 1");
+        var settingsTabTwo = CreateTabPage("Craft Ayarlari 2");
         var timingTab = CreateTabPage("Zamanlama");
         var pointsTab = CreateTabPage("Noktalar");
         var modsTab = CreateTabPage("Kayitli Modlar");
@@ -96,33 +97,7 @@ public sealed class MainForm : Form
         settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        for (var i = 0; i < 5; i++)
-        {
-            var rule = _config.ClipboardCheck.MatchRules[i];
-            settingsGrid.Controls.Add(new Label { Text = $"Aranan Mod {i + 1}", AutoSize = true, Anchor = AnchorStyles.Left }, 0, i);
-            var rulePanel = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                AutoSize = true
-            };
-            rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-
-            var enabledCheckBox = new CheckBox { AutoSize = true, Checked = rule.Enabled, Text = "Aktif" };
-            enabledCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
-            var ruleComboBox = new ComboBox
-            {
-                Dock = DockStyle.Top,
-                DropDownStyle = ComboBoxStyle.DropDownList
-            };
-            ruleComboBox.SelectedIndexChanged += (_, _) => SaveUiToConfig();
-            _matchRuleCheckBoxes.Add(enabledCheckBox);
-            _matchRuleComboBoxes.Add(ruleComboBox);
-            rulePanel.Controls.Add(enabledCheckBox, 0, 0);
-            rulePanel.Controls.Add(ruleComboBox, 1, 0);
-            settingsGrid.Controls.Add(rulePanel, 1, i);
-        }
+        AddMatchRuleRows(settingsGrid, 0, 7);
 
         _modeComboBox = new ComboBox
         {
@@ -133,7 +108,24 @@ public sealed class MainForm : Form
         _modeComboBox.Items.Add(new ModeOption("hold_shift_spam", "Shift Basili Tekrarli Tiklama"));
         SelectMode();
 
-        settingsGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 5);
+        settingsGrid.Controls.Add(new Label { Text = "Yuzde Esigi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 7);
+        var thresholdPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
+        };
+        _percentageThresholdTextBox = new TextBox
+        {
+            Width = 80,
+            Text = _config.ClipboardCheck.PercentageThresholdText
+        };
+        _percentageThresholdTextBox.TextChanged += (_, _) => SaveUiToConfig();
+        thresholdPanel.Controls.Add(_percentageThresholdTextBox);
+        settingsGrid.Controls.Add(thresholdPanel, 1, 7);
+
+        settingsGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 8);
         var logPathPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -147,9 +139,9 @@ public sealed class MainForm : Form
         var chooseLogFolderButton = new Button { Text = "Klasor Sec", AutoSize = true };
         chooseLogFolderButton.Click += (_, _) => ChooseLogDirectory();
         logPathPanel.Controls.Add(chooseLogFolderButton, 1, 0);
-        settingsGrid.Controls.Add(logPathPanel, 1, 5);
+        settingsGrid.Controls.Add(logPathPanel, 1, 8);
 
-        settingsGrid.Controls.Add(new Label { Text = "Kopyala Goster", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 6);
+        settingsGrid.Controls.Add(new Label { Text = "Kopyala Goster", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 9);
         _showCopiedTextCheckBox = new CheckBox
         {
             AutoSize = true,
@@ -157,9 +149,29 @@ public sealed class MainForm : Form
             Text = "Kopyalanan metni logla"
         };
         _showCopiedTextCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
-        settingsGrid.Controls.Add(_showCopiedTextCheckBox, 1, 6);
+        settingsGrid.Controls.Add(_showCopiedTextCheckBox, 1, 9);
 
         settingsGroup.Controls.Add(settingsGrid);
+
+        var settingsGroupTwo = new GroupBox
+        {
+            Dock = DockStyle.Top,
+            Text = "Craft Ayarlari 2",
+            AutoSize = true,
+            Width = 970
+        };
+
+        var settingsGridTwo = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 2,
+            AutoSize = true
+        };
+        settingsGridTwo.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
+        settingsGridTwo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        AddMatchRuleRows(settingsGridTwo, 7, 8);
+        settingsGroupTwo.Controls.Add(settingsGridTwo);
 
         var timingGroup = new GroupBox
         {
@@ -418,10 +430,12 @@ public sealed class MainForm : Form
         logGroup.Controls.Add(_logTextBox);
 
         ((Panel)settingsTab.Controls[0]).Controls.Add(settingsGroup);
+        ((Panel)settingsTabTwo.Controls[0]).Controls.Add(settingsGroupTwo);
         ((Panel)timingTab.Controls[0]).Controls.Add(timingGroup);
         ((Panel)pointsTab.Controls[0]).Controls.Add(pointsGroup);
         ((Panel)modsTab.Controls[0]).Controls.Add(modsGroup);
         tabs.TabPages.Add(settingsTab);
+        tabs.TabPages.Add(settingsTabTwo);
         tabs.TabPages.Add(timingTab);
         tabs.TabPages.Add(pointsTab);
         tabs.TabPages.Add(modsTab);
@@ -547,9 +561,11 @@ public sealed class MainForm : Form
     {
         for (var i = 0; i < _config.ClipboardCheck.MatchRules.Count && i < _matchRuleComboBoxes.Count; i++)
         {
-            _config.ClipboardCheck.MatchRules[i].Enabled = _matchRuleCheckBoxes[i].Checked;
             _config.ClipboardCheck.MatchRules[i].Text = _matchRuleComboBoxes[i].SelectedItem?.ToString()?.Trim() ?? string.Empty;
+            _config.ClipboardCheck.MatchRules[i].Enabled = !string.IsNullOrWhiteSpace(_config.ClipboardCheck.MatchRules[i].Text);
         }
+
+        _config.ClipboardCheck.PercentageThresholdText = _percentageThresholdTextBox.Text.Trim();
 
         var firstActiveRule = _config.ClipboardCheck.GetActiveRules().FirstOrDefault();
         _config.ClipboardCheck.MustContain = firstActiveRule?.Text ?? string.Empty;
@@ -908,6 +924,39 @@ public sealed class MainForm : Form
     private static DelayRange CreateRange(NumericUpDown minInput, NumericUpDown maxInput)
     {
         return new DelayRange(Decimal.ToInt32(minInput.Value), Decimal.ToInt32(maxInput.Value));
+    }
+
+    private void AddMatchRuleRows(TableLayoutPanel grid, int startIndex, int count)
+    {
+        for (var offset = 0; offset < count; offset++)
+        {
+            var matchRuleIndex = startIndex + offset;
+            var rule = _config.ClipboardCheck.MatchRules[matchRuleIndex];
+            grid.Controls.Add(new Label
+            {
+                Text = $"Aranan Mod {matchRuleIndex + 1}",
+                AutoSize = true,
+                Anchor = AnchorStyles.Left
+            }, 0, offset);
+
+            var rulePanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                AutoSize = true
+            };
+            rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            var ruleComboBox = new ComboBox
+            {
+                Dock = DockStyle.Top,
+                DropDownStyle = ComboBoxStyle.DropDownList
+            };
+            ruleComboBox.SelectedIndexChanged += (_, _) => SaveUiToConfig();
+            _matchRuleComboBoxes.Add(ruleComboBox);
+            rulePanel.Controls.Add(ruleComboBox, 0, 0);
+            grid.Controls.Add(rulePanel, 1, offset);
+        }
     }
 
     private static TabPage CreateTabPage(string title)
