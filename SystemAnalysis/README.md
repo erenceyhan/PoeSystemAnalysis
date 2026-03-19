@@ -1,93 +1,110 @@
 # SystemAnalysis
 
-Bu surum, ekrandaki belirli noktalara tiklayip item metnini `Ctrl+C` ile okuyarak craft akislarini sirali ve kontrollu sekilde yoneten Windows Forms uygulamasidir.
+SystemAnalysis, ekrandaki belirli noktalara tiklayip item metnini `Ctrl+C` ile okuyarak craft akislarini kontrollu sekilde yoneten Windows Forms uygulamasidir.
 
-## Ne Yapar
+## Neler Yapabilir
 
-- Bir veya iki currency noktasi ile calisir.
-- Birden fazla item noktasi tanimlayabilirsin.
-- Her tiklamadan sonra itemi ayni noktada kontrol eder.
-- Fare hareketi, tiklama veya klavye tusu algilanirsa otomatik durur.
-- Loglari hem ekranda hem de `.txt` dosyasinda tutar.
-- Itemlar tamamlandikca UI listesinden kaldirilir.
+- Bir veya iki currency noktasi ile calisir
+- Birden fazla item noktasi tanimlayabilir
+- Her tiklamadan sonra itemi ayni noktada kontrol eder
+- Itemlar arasinda tur mantigiyla doner
+- Tamamlanan itemlari hem mantiksal listeden hem UI listesinden kaldirir
+- Ekranda ustte kalan canli durum penceresi gosterir
+- Loglari hem ekranda hem `.txt` dosyasinda tutar
+- Kullanici fare/klavye ile mudahale ederse otomatik durur
 
-## Temel Mantik
+## Calisma Akislari
 
-Program iki ana akisi destekler:
+Program iki ana akis destekler:
 
 - `Sadece Alteration`
 - `Alteration + Augment`
-
-Hangi akisin calisacagi `Augment Akisi` kutusuna gore belirlenir.
 
 ### Sadece Alteration
 
 Her item icin:
 
-1. `Alteration` noktasina sag tik yapar.
-2. `Shift` basili tutar.
-3. Iteme sol tik atar.
-4. Ayni item ustunde `Ctrl+C` ile metni okur.
-5. `Aranan Mod` kutularindan biri gelirse item tamamlanir.
-6. Gelmezse devam eder.
+1. `Alteration` noktasina sag tik yapar
+2. `Shift` basili tutar
+3. iteme sol tik atar
+4. ayni item ustunde `Ctrl+C` ile kontrol eder
+5. `Aranan Mod` kutularindan biri gelirse item tamamlanir
 
 ### Alteration + Augment
 
 Her item icin:
 
-1. Once alteration asamasi calisir.
-2. `Craft Ayarlari 1` ve `Craft Ayarlari 2` sekmelerindeki modlardan biri gelene kadar alteration denenir.
-3. Hedef mod bulunduktan sonra `Augment` noktasina bir kez sag tik yapar.
-4. Iteme bir kez sol tik yapar.
-5. Tekrar kontrol eder.
-6. Hem alteration tarafindaki modlardan biri, hem de `Augment` sekmesindeki modlardan biri varsa item tamamlanir.
-7. Yoksa alteration dongusu basa doner.
+1. Once alteration asamasi calisir
+2. `Craft Ayarlari 1-2` secimlerinden biri gelene kadar alteration denenir
+3. Hedef mod bulununca `Augment` noktasina bir kez sag tik yapar
+4. iteme bir kez sol tik yapar
+5. tekrar kontrol eder
+6. Hem alteration tarafindaki modlardan biri, hem de `Augment` sekmesindeki modlardan biri varsa item tamamlanir
+7. Yoksa alteration dongusu basa doner
 
 ## Item Tur Limiti
 
-`Item Tur Limiti` alani itemlar arasinda donmeli deneme yapmak icindir.
+`Item Tur Limiti` alani bir itemin tek turda en fazla kac sol tik alacagini belirler.
 
 Ornek:
 
-- deger `300` ise
-- bir item bu turda en fazla `300` sol tik alir
+- deger `300` ise bir item tek turda en fazla `300` sol tik alir
 - tamamlanmazsa siradaki itema gecer
-- tum itemler bir tur donunce tamamlanmayanlarla basa doner
+- tur sonuna gelindiginde tamamlanmayan itemlarla basa donulur
 
-Bu sayede tek itemda takilip kalmaz.
+Bu sayede tek itemda takilip kalinmaz.
 
-## Esik Mantigi
+## Mod ve Esik Mantigi
 
-Artik her mod satirinin kendi esik kutusu vardir.
+### Aranan Modlar
 
-Kural:
+- `Craft Ayarlari 1`: `Aranan Mod 1-7`
+- `Craft Ayarlari 2`: `Aranan Mod 8-15`
+- `Augment`: `Augment Mod 1-8`
 
-- Mod metninde `#` varsa, ayni satirdaki esik kutusundaki sayi kullanilir.
-- Mod metninde `#` yoksa, yanindaki kutu dikkate alinmaz.
+Her satirda:
+
+- bir `combobox`
+- o satira ait bir esik kutusu
+
+### Esik Kurali
+
+- Mod metninde `#` varsa, o satirin yanindaki esik kutusu kullanilir
+- Mod metninde `#` yoksa, yanindaki kutu dikkate alinmaz
+- Kural `>=` seklindedir
 
 Ornek:
 
 - mod: `#% increased Evasion Rating during Effect`
 - esik: `55`
 
-Su degerler kabul edilir:
+Kabul edilen degerler:
 
-- `55% increased Evasion Rating during Effect`
-- `56% increased Evasion Rating during Effect`
-- `60% increased Evasion Rating during Effect`
+- `55% ...`
+- `56% ...`
+- `60% ...`
 
-Yani kural `>=` seklindedir.
+### Guvenlik Kurali
 
-Eger secili bir modda `#` varsa ama o satirin esik kutusu bossa, `F8` ile baslatirken uygulama baslamaz ve logda uyari verir.
+Eger secili bir modda `#` varsa ama o satirin esik kutusu bossa:
+
+- `F8` ile baslatamazsin
+- loga hata yazilir
+- kisa bir uyari sesi calar
+
+### Secim Degisince Ne Olur
+
+Bir mod secimi degistiginde:
+
+- o satirin esik kutusu otomatik temizlenir
+
+Boylece eski bir sayi unutulup yanlis eslesme yaratmaz.
 
 ## Arayuz Sekmeleri
 
 ### Craft Ayarlari 1
 
 - `Aranan Mod 1-7`
-- her satirda:
-  - bir `combobox`
-  - bir esik kutusu
 - `Item Tur Limiti`
 - `Augment Akisi`
 - `Log Klasoru`
@@ -96,16 +113,10 @@ Eger secili bir modda `#` varsa ama o satirin esik kutusu bossa, `F8` ile baslat
 ### Craft Ayarlari 2
 
 - `Aranan Mod 8-15`
-- her satirda:
-  - bir `combobox`
-  - bir esik kutusu
 
 ### Augment
 
 - `Augment Mod 1-8`
-- her satirda:
-  - bir `combobox`
-  - bir esik kutusu
 
 ### Zamanlama
 
@@ -119,7 +130,7 @@ Tum beklemeler `Min/Max` araliginda rastgele secilir:
 
 ### Noktalar
 
-- `F6` currency noktalarini sirayla kaydeder:
+- `F6` currency noktalarini sirayla kaydeder
   - ilk `F6`: `Alteration`
   - ikinci `F6`: `Augment`
   - sonra tekrar basa doner
@@ -130,9 +141,9 @@ Tum beklemeler `Min/Max` araliginda rastgele secilir:
 
 Not:
 
-- `Item Noktalari` oturumluktur
+- item noktalarini oturumluk tutar
 - program kapaninca item noktasi listesi sifirlanir
-- diger ayarlar kaydedilir
+- diger ayarlar kalici kaydedilir
 
 ### Kayitli Modlar
 
@@ -155,17 +166,17 @@ Ama sunlara dokunmaz:
 
 - kayitli mod listesi
 - currency noktalari
-- item noktalarindan oturum disi saklanan ayarlar
+- kalici ayarlar
 
 ## Kisa Yol Tuslari
 
 - `F6`: currency noktalarini sirayla kaydet
-- `F7`: yeni item noktasi ekle
+- `F7`: item noktasi ekle
 - `F8`: baslat
 - `F9`: durdur
 - `Esc`: aktif islemi durdur
 
-Program calisirken sen:
+Program calisirken:
 
 - fareyi hareket ettirirsen
 - fare ile tiklarsan
@@ -173,13 +184,30 @@ Program calisirken sen:
 
 otomatik durur.
 
-## Loglama
+## Ustte Kalan Durum Penceresi
 
-- `F8` ile her calistirmada secili klasorde tarih-saat adli yeni bir `.txt` dosyasi olusur.
-- Ekrandaki loglar ayni anda dosyaya da yazilir.
-- `Kopyala Goster` aciksa clipboard’a gelen metinler de loga yazilir.
-- Her item icin alteration, augment, toplam sol tik ve sure ozetlenir.
-- Tum islem sonunda genel ozet yazilir.
+`F8` ile calisma basladiginda ayri bir kucuk pencere acilir.
+
+Bu pencere:
+
+- her seyin ustunde kalir
+- sag ust tarafta gorunur
+- iki buyuk sayi gosterir:
+  - `Sol Tik`
+  - `Tamamlanan Item`
+
+Boylece ana pencere arkada kalsa bile kac tik atildigini ve kac itemin bittigini gorebilirsin.
+
+Islem bitince veya durunca bu pencere kapanir.
+
+## Loglama ve Uyari
+
+- `F8` ile her calistirmada secili klasorde tarih-saat adli yeni bir `.txt` log dosyasi olusur
+- ekrandaki loglar ayni anda bu dosyaya da yazilir
+- `Kopyala Goster` aciksa clipboard'a gelen metinler de loga yazilir
+- baslatma oncesi hata varsa kisa bir uyari sesi calar
+- her item icin alteration, augment, toplam sol tik ve sure ozetlenir
+- tum islem sonunda genel ozet yazilir
 
 Loglarda gorulebilecek onemli satirlar:
 
@@ -211,10 +239,10 @@ Kalici olmayan:
 
 ## Dogru Kullanim Icin Notlar
 
-- `Ctrl+C` ile item bilgisinin gercekten panoya geldigini once manuel denemek iyi olur.
-- Item penceresi veya oyun arayuzu yer degistirirse koordinatlari yeniden kaydetmek gerekir.
-- `Aranan Mod` ve `Augment Mod` satirlarinda bos olan kutular tamamen yok sayilir.
-- Item tamamlandiginda UI listesinden de silinir.
+- `Ctrl+C` ile item bilgisinin gercekten panoya geldigini once manuel denemek iyi olur
+- item penceresi veya oyun arayuzu yer degistirirse koordinatlari yeniden kaydetmek gerekir
+- bos mod kutulari tamamen yok sayilir
+- item tamamlandiginda UI listesinden de silinir
 
 ## Debug'da Calistirma
 
@@ -225,7 +253,7 @@ dotnet build
 .\bin\Debug\net10.0-windows\SystemAnalysis.exe
 ```
 
-Dogrudan exe acmak istersen:
+Dogrudan debug exe acmak icin:
 
 ```powershell
 & "C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Debug\net10.0-windows\SystemAnalysis.exe"
@@ -246,7 +274,7 @@ Olusan exe:
 C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Release\net10.0-windows\win-x64\publish\SystemAnalysis.exe
 ```
 
-Release exe’yi acmak icin:
+Release exe acmak icin:
 
 ```powershell
 & "C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Release\net10.0-windows\win-x64\publish\SystemAnalysis.exe"
@@ -262,7 +290,7 @@ Release exe’yi acmak icin:
 
 Projeye geri dondugunde en hizli baslangic genelde su olur:
 
-1. Debug test icin `dotnet build` + debug exe
-2. Son kullanilan ayarlari kontrol et
-3. Item noktalarini yeniden sec
-4. Gerekirse release publish al
+1. debug test icin `dotnet build` + debug exe
+2. son kullanilan ayarlari kontrol et
+3. item noktalarini yeniden sec
+4. gerekirse release publish al

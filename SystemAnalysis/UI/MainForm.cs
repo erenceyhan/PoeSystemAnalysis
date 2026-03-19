@@ -2,6 +2,7 @@ using SystemAnalysis.Automation;
 using SystemAnalysis.Config;
 using SystemAnalysis.Interop;
 using System.Drawing;
+using System.Media;
 using System.Text;
 
 namespace SystemAnalysis.UI;
@@ -18,6 +19,7 @@ public sealed class MainForm : Form
     private Task? _currentRun;
     private string? _currentLogFilePath;
     private string _lastClipboardText = string.Empty;
+    private RunStatusOverlayForm? _runStatusOverlay;
 
     private readonly List<ComboBox> _matchRuleComboBoxes = new();
     private readonly List<ComboBox> _augmentRuleComboBoxes = new();
@@ -547,6 +549,7 @@ public sealed class MainForm : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         StopCurrentRun("Pencere kapatildi.");
+        HideRunStatusOverlay();
         InputController.ReleaseCommonModifiers();
         SaveUiToConfig();
         NativeMethods.RemoveClipboardFormatListener(Handle);
@@ -576,34 +579,35 @@ public sealed class MainForm : Form
 
             if (_config.TargetPoints.Count == 0)
             {
+                SystemSounds.Exclamation.Play();
                 AppendLog("En az bir item noktasi eklemeden baslatamazsin.");
                 return;
             }
 
             if (IsUnset(_config.SourcePoint))
             {
+                SystemSounds.Exclamation.Play();
                 AppendLog("Once alteration noktasini kaydetmelisin.");
                 return;
             }
 
             if (_useAugmentCycleCheckBox.Checked && IsUnset(_config.SecondarySourcePoint))
             {
+                SystemSounds.Exclamation.Play();
                 AppendLog("Augment akisi aciksa once augment noktasini kaydetmelisin.");
                 return;
             }
 
             if (_useAugmentCycleCheckBox.Checked && !_config.ClipboardCheck.GetActiveAugmentRules().Any())
             {
+                SystemSounds.Exclamation.Play();
                 AppendLog("Augment akisi aciksa augment sekmesinden en az bir mod secmelisin.");
                 return;
             }
 
-            var selectedRules = _config.ClipboardCheck.GetActiveRules()
-                .Concat(_config.ClipboardCheck.GetActiveAugmentRules())
-                .ToList();
-            var hasThresholdRuleWithoutValue = selectedRules.Any(rule => rule.Text.Contains('#') && string.IsNullOrWhiteSpace(rule.ThresholdText));
-            if (hasThresholdRuleWithoutValue)
+            if (HasThresholdRuleWithoutValue())
             {
+                SystemSounds.Exclamation.Play();
                 AppendLog("Secili modlardan birinde '#' kullaniliyor. O modun yanindaki esik kutusunu doldurmalisin.");
                 return;
             }
@@ -618,12 +622,18 @@ public sealed class MainForm : Form
             _monitor.IsArmed = true;
             SetRunningState(true);
             AppendLog($"Baslatma istendi. Calisacak akis: {(useAugmentCycle ? "Alteration + Augment" : "Sadece Alteration")}");
+            ShowRunStatusOverlay();
+            UpdateRunStatusOverlay(new RunProgress(0, 0));
 
             _currentRun = Task.Run(async () =>
             {
                 try
                 {
-                    var runner = new AnalysisRunner(_config, AppendLogThreadSafe, point => InvokeOnUi(() => RemoveCompletedTargetPoint(point)));
+                    var runner = new AnalysisRunner(
+                        _config,
+                        AppendLogThreadSafe,
+                        point => InvokeOnUi(() => RemoveCompletedTargetPoint(point)),
+                        progress => InvokeOnUi(() => UpdateRunStatusOverlay(progress)));
                     await runner.RunAsync(_runCancellation.Token);
                 }
                 catch (OperationCanceledException)
@@ -643,7 +653,11 @@ public sealed class MainForm : Form
                         _runCancellation = null;
                     }
 
-                    InvokeOnUi(() => SetRunningState(false));
+                    InvokeOnUi(() =>
+                    {
+                        SetRunningState(false);
+                        HideRunStatusOverlay();
+                    });
                 }
             });
         }
@@ -1158,6 +1172,65 @@ public sealed class MainForm : Form
         return $"X: {point.X}, Y: {point.Y}";
     }
 
+    private void ShowRunStatusOverlay()
+    {
+        if (_runStatusOverlay is null || _runStatusOverlay.IsDisposed)
+        {
+            _runStatusOverlay = new RunStatusOverlayForm();
+        }
+
+        _runStatusOverlay.PositionOnScreen();
+        _runStatusOverlay.UpdateProgress(0, 0);
+
+        if (!_runStatusOverlay.Visible)
+        {
+            _runStatusOverlay.Show(this);
+        }
+    }
+
+    private void HideRunStatusOverlay()
+    {
+        if (_runStatusOverlay is null || _runStatusOverlay.IsDisposed)
+        {
+            return;
+        }
+
+        _runStatusOverlay.Hide();
+    }
+
+    private void UpdateRunStatusOverlay(RunProgress progress)
+    {
+        if (_runStatusOverlay is null || _runStatusOverlay.IsDisposed)
+        {
+            return;
+        }
+
+        _runStatusOverlay.UpdateProgress(progress.TotalClicks, progress.CompletedItems);
+    }
+
+    private bool HasThresholdRuleWithoutValue()
+    {
+        for (var i = 0; i < _matchRuleComboBoxes.Count && i < _matchRuleThresholdTextBoxes.Count; i++)
+        {
+            var selectedText = _matchRuleComboBoxes[i].SelectedItem?.ToString()?.Trim() ?? string.Empty;
+            if (selectedText.Contains('#') && string.IsNullOrWhiteSpace(_matchRuleThresholdTextBoxes[i].Text))
+            {
+                return true;
+            }
+        }
+
+        for (var i = 0; i < _augmentRuleComboBoxes.Count && i < _augmentRuleThresholdTextBoxes.Count; i++)
+        {
+            var selectedText = _augmentRuleComboBoxes[i].SelectedItem?.ToString()?.Trim() ?? string.Empty;
+            if (selectedText.Contains('#') && string.IsNullOrWhiteSpace(_augmentRuleThresholdTextBoxes[i].Text))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static NumericUpDown CreateTimingInput(int value)
     {
         return new NumericUpDown
@@ -1203,10 +1276,6 @@ public sealed class MainForm : Form
                 Dock = DockStyle.Top,
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
-            ruleComboBox.SelectedIndexChanged += (_, _) => SaveUiToConfig();
-            _matchRuleComboBoxes.Add(ruleComboBox);
-            rulePanel.Controls.Add(ruleComboBox, 0, 0);
-
             var thresholdTextBox = new TextBox
             {
                 Dock = DockStyle.Top,
@@ -1214,6 +1283,17 @@ public sealed class MainForm : Form
                 Text = rule.ThresholdText
             };
             thresholdTextBox.TextChanged += (_, _) => SaveUiToConfig();
+            ruleComboBox.SelectedIndexChanged += (_, _) =>
+            {
+                if (!_isRefreshingUi)
+                {
+                    thresholdTextBox.Clear();
+                }
+
+                SaveUiToConfig();
+            };
+            _matchRuleComboBoxes.Add(ruleComboBox);
+            rulePanel.Controls.Add(ruleComboBox, 0, 0);
             _matchRuleThresholdTextBoxes.Add(thresholdTextBox);
             rulePanel.Controls.Add(thresholdTextBox, 1, 0);
             grid.Controls.Add(rulePanel, 1, offset);
@@ -1238,9 +1318,6 @@ public sealed class MainForm : Form
                 Dock = DockStyle.Top,
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
-            comboBox.SelectedIndexChanged += (_, _) => SaveUiToConfig();
-            _augmentRuleComboBoxes.Add(comboBox);
-
             var rowPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -1258,6 +1335,16 @@ public sealed class MainForm : Form
                 Text = _config.ClipboardCheck.AugmentMatchRules[matchRuleIndex].ThresholdText
             };
             thresholdTextBox.TextChanged += (_, _) => SaveUiToConfig();
+            comboBox.SelectedIndexChanged += (_, _) =>
+            {
+                if (!_isRefreshingUi)
+                {
+                    thresholdTextBox.Clear();
+                }
+
+                SaveUiToConfig();
+            };
+            _augmentRuleComboBoxes.Add(comboBox);
             _augmentRuleThresholdTextBoxes.Add(thresholdTextBox);
             rowPanel.Controls.Add(thresholdTextBox, 1, 0);
 

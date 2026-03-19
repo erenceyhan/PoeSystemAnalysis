@@ -11,16 +11,18 @@ public sealed class AnalysisRunner
     private readonly AppConfig _config;
     private readonly Action<string>? _log;
     private readonly Action<PointConfig>? _itemCompleted;
+    private readonly Action<RunProgress>? _progressChanged;
     private readonly Random _random = new();
     private readonly List<ItemRunSummary> _allItems = new();
     private readonly Stopwatch _totalStopwatch = Stopwatch.StartNew();
     private bool _summaryLogged;
 
-    public AnalysisRunner(AppConfig config, Action<string>? log = null, Action<PointConfig>? itemCompleted = null)
+    public AnalysisRunner(AppConfig config, Action<string>? log = null, Action<PointConfig>? itemCompleted = null, Action<RunProgress>? progressChanged = null)
     {
         _config = config;
         _log = log;
         _itemCompleted = itemCompleted;
+        _progressChanged = progressChanged;
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -44,6 +46,7 @@ public sealed class AnalysisRunner
             {
                 _allItems.Add(new ItemRunSummary(i + 1, _config.TargetPoints[i]));
             }
+            ReportProgress();
 
             var pendingItems = new List<ItemRunSummary>(_allItems);
             var maxClicksPerRound = Math.Max(1, _config.MaxClicksPerItemRound);
@@ -78,6 +81,7 @@ public sealed class AnalysisRunner
                         item.Completed = true;
                         pendingItems.Remove(item);
                         _itemCompleted?.Invoke(item.Point);
+                        ReportProgress();
                         LogItemSummary(item, "tamamlandi");
                     }
                     else if (!cancellationToken.IsCancellationRequested)
@@ -135,6 +139,7 @@ public sealed class AnalysisRunner
                 item.AlterationUses++;
                 item.TotalItemClicks++;
                 item.LastRoundClicks++;
+                ReportProgress();
                 await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
 
                 var inspection = await InspectAsync(item, cancellationToken);
@@ -243,6 +248,7 @@ public sealed class AnalysisRunner
                 item.AlterationUses++;
                 item.TotalItemClicks++;
                 roundState.Clicks++;
+                ReportProgress();
                 await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
 
                 var inspection = await InspectAsync(item, cancellationToken);
@@ -281,6 +287,7 @@ public sealed class AnalysisRunner
         LeftClick(item.Point);
         item.TotalItemClicks++;
         roundState.Clicks++;
+        ReportProgress();
         await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
         Log($"Item {item.Index}: Tek augment denemesi tamamlandi.");
         return true;
@@ -487,6 +494,13 @@ public sealed class AnalysisRunner
     private void Log(string message)
     {
         _log?.Invoke(message);
+    }
+
+    private void ReportProgress()
+    {
+        _progressChanged?.Invoke(new RunProgress(
+            _allItems.Sum(item => item.TotalItemClicks),
+            _allItems.Count(item => item.Completed)));
     }
 
     private void LogItemSummary(ItemRunSummary item, string status)
