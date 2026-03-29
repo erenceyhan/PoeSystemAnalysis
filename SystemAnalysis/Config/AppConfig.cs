@@ -6,7 +6,9 @@ public sealed class AppConfig
 {
     public string Mode { get; set; } = "hold_shift_spam";
     public int MaxClicksPerItemRound { get; set; } = 300;
+    public int MaxAlterationsPerSourcePoint { get; set; } = 5000;
     public PointConfig SourcePoint { get; set; } = new();
+    public List<PointConfig> AlterationPoints { get; set; } = new();
     public PointConfig SecondarySourcePoint { get; set; } = new();
     public PointConfig TargetPoint { get; set; } = new();
     public PointConfig InspectPoint { get; set; } = new();
@@ -50,7 +52,29 @@ public sealed class AppConfig
             .ToList();
 
         MaxClicksPerItemRound = Math.Max(1, MaxClicksPerItemRound);
+        MaxAlterationsPerSourcePoint = Math.Max(1, MaxAlterationsPerSourcePoint);
+        AlterationPoints ??= new List<PointConfig>();
+        AlterationPoints = AlterationPoints
+            .Where(point => point is not null && !IsUnset(point))
+            .Select(point => new PointConfig { X = point.X, Y = point.Y })
+            .Distinct(PointConfigEqualityComparer.Instance)
+            .ToList();
+
+        if (AlterationPoints.Count == 0 && !IsUnset(SourcePoint))
+        {
+            AlterationPoints.Add(new PointConfig { X = SourcePoint.X, Y = SourcePoint.Y });
+        }
+
+        SourcePoint = AlterationPoints.Count > 0
+            ? new PointConfig { X = AlterationPoints[0].X, Y = AlterationPoints[0].Y }
+            : new PointConfig();
+
         TargetPoints ??= new List<PointConfig>();
+    }
+
+    private static bool IsUnset(PointConfig point)
+    {
+        return point.X == 0 && point.Y == 0;
     }
 }
 
@@ -58,6 +82,31 @@ public sealed class PointConfig
 {
     public int X { get; set; }
     public int Y { get; set; }
+}
+
+public sealed class PointConfigEqualityComparer : IEqualityComparer<PointConfig>
+{
+    public static PointConfigEqualityComparer Instance { get; } = new();
+
+    public bool Equals(PointConfig? x, PointConfig? y)
+    {
+        if (ReferenceEquals(x, y))
+        {
+            return true;
+        }
+
+        if (x is null || y is null)
+        {
+            return false;
+        }
+
+        return x.X == y.X && x.Y == y.Y;
+    }
+
+    public int GetHashCode(PointConfig obj)
+    {
+        return HashCode.Combine(obj.X, obj.Y);
+    }
 }
 
 public sealed class ClipboardCheckConfig

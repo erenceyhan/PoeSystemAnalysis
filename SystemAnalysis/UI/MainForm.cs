@@ -3,6 +3,7 @@ using SystemAnalysis.Config;
 using SystemAnalysis.Interop;
 using System.Drawing;
 using System.Media;
+using System.Reflection;
 using System.Text;
 
 namespace SystemAnalysis.UI;
@@ -28,7 +29,8 @@ public sealed class MainForm : Form
     private readonly ComboBox _modeComboBox;
     private readonly CheckBox _useAugmentCycleCheckBox;
     private readonly NumericUpDown _maxClicksPerItemRoundInput;
-    private readonly Label _nextCurrencyCaptureLabel;
+    private readonly NumericUpDown _maxAlterationsPerSourcePointInput;
+    private readonly Label _augmentPointLabel;
     private readonly ListBox _currencyPointsListBox;
     private readonly Label _targetLabel;
     private readonly ListBox _targetPointsListBox;
@@ -49,7 +51,6 @@ public sealed class MainForm : Form
     private readonly Button _startButton;
     private readonly Button _stopButton;
     private readonly TextBox _logTextBox;
-    private PointKind _nextCurrencyCaptureKind = PointKind.Source;
     private bool _isRefreshingUi;
 
     public MainForm(string configPath, AppConfig config)
@@ -58,10 +59,17 @@ public sealed class MainForm : Form
         _config = config;
         _monitor = new GlobalInputMonitor(config.Safety);
 
+        SuspendLayout();
+
         Text = "SystemAnalysis";
         StartPosition = FormStartPosition.CenterScreen;
+        AutoScaleMode = AutoScaleMode.None;
         MinimumSize = new Size(940, 760);
         Size = new Size(1040, 860);
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+        UpdateStyles();
+
+        EnableDoubleBuffering(this);
 
         var splitContainer = new SplitContainer
         {
@@ -70,24 +78,45 @@ public sealed class MainForm : Form
             SplitterWidth = 8,
             FixedPanel = FixedPanel.Panel2
         };
+        splitContainer.SuspendLayout();
+        splitContainer.Panel1.SuspendLayout();
+        splitContainer.Panel2.SuspendLayout();
+        EnableDoubleBuffering(splitContainer);
+        EnableDoubleBuffering(splitContainer.Panel1);
+        EnableDoubleBuffering(splitContainer.Panel2);
 
         var panel1Container = new Panel
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(12)
         };
+        panel1Container.SuspendLayout();
+        EnableDoubleBuffering(panel1Container);
 
-        var tabs = new TabControl
+        var sectionBar = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            WrapContents = false,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = new Padding(0, 0, 0, 8)
         };
+        var contentHost = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(0)
+        };
+        sectionBar.SuspendLayout();
+        contentHost.SuspendLayout();
+        EnableDoubleBuffering(sectionBar);
+        EnableDoubleBuffering(contentHost);
 
-        var settingsTab = CreateTabPage("Craft Ayarlari 1");
-        var settingsTabTwo = CreateTabPage("Craft Ayarlari 2");
-        var augmentTab = CreateTabPage("Augment");
-        var timingTab = CreateTabPage("Zamanlama");
-        var pointsTab = CreateTabPage("Noktalar");
-        var modsTab = CreateTabPage("Kayitli Modlar");
+        var settingsTab = CreateSectionPanel();
+        var settingsTabTwo = CreateSectionPanel();
+        var augmentTab = CreateSectionPanel();
+        var timingTab = CreateSectionPanel();
+        var pointsTab = CreateSectionPanel();
+        var modsTab = CreateSectionPanel();
 
         var settingsGroup = new GroupBox
         {
@@ -102,7 +131,9 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 2,
-            AutoSize = true
+            AutoSize = true,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
+            RowCount = 12
         };
         settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -130,7 +161,19 @@ public sealed class MainForm : Form
         _maxClicksPerItemRoundInput.ValueChanged += (_, _) => SaveUiToConfig();
         settingsGrid.Controls.Add(_maxClicksPerItemRoundInput, 1, 7);
 
-        settingsGrid.Controls.Add(new Label { Text = "Augment Akisi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 8);
+        settingsGrid.Controls.Add(new Label { Text = "Alteration Nokta Limiti", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 8);
+        _maxAlterationsPerSourcePointInput = new NumericUpDown
+        {
+            Minimum = 1,
+            Maximum = 50000,
+            Increment = 100,
+            Value = Math.Max(1, Math.Min(_config.MaxAlterationsPerSourcePoint, 50000)),
+            Width = 100
+        };
+        _maxAlterationsPerSourcePointInput.ValueChanged += (_, _) => SaveUiToConfig();
+        settingsGrid.Controls.Add(_maxAlterationsPerSourcePointInput, 1, 8);
+
+        settingsGrid.Controls.Add(new Label { Text = "Augment Akisi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 9);
         _useAugmentCycleCheckBox = new CheckBox
         {
             AutoSize = true,
@@ -138,35 +181,29 @@ public sealed class MainForm : Form
             Text = "Flask icin alteration sonrasi augment uygula"
         };
         _useAugmentCycleCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
-        settingsGrid.Controls.Add(_useAugmentCycleCheckBox, 1, 8);
+        settingsGrid.Controls.Add(_useAugmentCycleCheckBox, 1, 9);
 
-        settingsGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 9);
+        settingsGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 10);
         var logPathPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
+            RowCount = 2,
             AutoSize = true
         };
         logPathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         logPathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        logPathPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        logPathPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _logDirectoryTextBox = new TextBox { Dock = DockStyle.Top, Text = _config.Logging.DirectoryPath };
         logPathPanel.Controls.Add(_logDirectoryTextBox, 0, 0);
         var chooseLogFolderButton = new Button { Text = "Klasor Sec", AutoSize = true };
         chooseLogFolderButton.Click += (_, _) => ChooseLogDirectory();
         logPathPanel.Controls.Add(chooseLogFolderButton, 1, 0);
-        settingsGrid.Controls.Add(logPathPanel, 1, 9);
-
-        settingsGrid.Controls.Add(new Label { Text = "Kopyala Goster", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 10);
-        _showCopiedTextCheckBox = new CheckBox
-        {
-            AutoSize = true,
-            Checked = _config.Logging.ShowCopiedText,
-            Text = "Kopyalanan metni logla"
-        };
-        _showCopiedTextCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
-        settingsGrid.Controls.Add(_showCopiedTextCheckBox, 1, 10);
+        settingsGrid.Controls.Add(logPathPanel, 1, 10);
 
         settingsGroup.Controls.Add(settingsGrid);
+        FreezeSectionLayout(settingsGroup, settingsGrid, 520);
 
         var settingsGroupTwo = new GroupBox
         {
@@ -181,12 +218,15 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 2,
-            AutoSize = true
+            AutoSize = true,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
+            RowCount = 8
         };
         settingsGridTwo.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         settingsGridTwo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         AddMatchRuleRows(settingsGridTwo, 7, 8);
         settingsGroupTwo.Controls.Add(settingsGridTwo);
+        FreezeSectionLayout(settingsGroupTwo, settingsGridTwo, 420);
 
         var augmentGroup = new GroupBox
         {
@@ -201,7 +241,9 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 2,
-            AutoSize = true
+            AutoSize = true,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
+            RowCount = 9
         };
         augmentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         augmentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -215,6 +257,7 @@ public sealed class MainForm : Form
 
         AddAugmentRuleRows(augmentGrid, 0, 8, 1);
         augmentGroup.Controls.Add(augmentGrid);
+        FreezeSectionLayout(augmentGroup, augmentGrid, 420);
 
         var timingGroup = new GroupBox
         {
@@ -229,7 +272,9 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 5,
-            AutoSize = true
+            AutoSize = true,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
+            RowCount = 5
         };
         timingGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         timingGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
@@ -288,6 +333,7 @@ public sealed class MainForm : Form
         timingGrid.Controls.Add(_delayAfterInspectShortcutMaxInput, 4, 4);
 
         timingGroup.Controls.Add(timingGrid);
+        FreezeSectionLayout(timingGroup, timingGrid, 280);
 
         var pointsGroup = new GroupBox
         {
@@ -302,7 +348,9 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 3,
-            AutoSize = true
+            AutoSize = true,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
+            RowCount = 2
         };
         pointsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
         pointsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -315,15 +363,20 @@ public sealed class MainForm : Form
             ColumnCount = 1,
             AutoSize = true
         };
-        _nextCurrencyCaptureLabel = new Label { AutoSize = true };
+        _augmentPointLabel = new Label { AutoSize = true };
         _currencyPointsListBox = new ListBox
         {
             Dock = DockStyle.Top,
-            Height = 72,
+            Height = 96,
             IntegralHeight = false
         };
-        currencyPointsPanel.Controls.Add(_nextCurrencyCaptureLabel, 0, 0);
+        currencyPointsPanel.Controls.Add(new Label
+        {
+            Text = "F6 yeni alteration noktasi ekler. F10 augment noktasini kaydeder.",
+            AutoSize = true
+        }, 0, 0);
         currencyPointsPanel.Controls.Add(_currencyPointsListBox, 0, 1);
+        currencyPointsPanel.Controls.Add(_augmentPointLabel, 0, 2);
         pointsGrid.Controls.Add(currencyPointsPanel, 1, 0);
 
         var currencyButtonsPanel = new FlowLayoutPanel
@@ -333,9 +386,17 @@ public sealed class MainForm : Form
             WrapContents = false,
             AutoSize = true
         };
-        var captureCurrencyButton = new Button { Text = "Mouse'tan Kaydet (F6)", AutoSize = true, Anchor = AnchorStyles.Right };
+        var captureCurrencyButton = new Button { Text = "Alteration Ekle (F6)", AutoSize = true, Anchor = AnchorStyles.Right };
         captureCurrencyButton.Click += (_, _) => CapturePoint(PointKind.Source);
         currencyButtonsPanel.Controls.Add(captureCurrencyButton);
+
+        var captureAugmentButton = new Button { Text = "Augment Kaydet (F10)", AutoSize = true };
+        captureAugmentButton.Click += (_, _) => CapturePoint(PointKind.SecondarySource);
+        currencyButtonsPanel.Controls.Add(captureAugmentButton);
+
+        var removeLastAlterationButton = new Button { Text = "Son Alterationu Sil", AutoSize = true };
+        removeLastAlterationButton.Click += (_, _) => RemoveLastAlterationPoint();
+        currencyButtonsPanel.Controls.Add(removeLastAlterationButton);
 
         var resetCurrencyButton = new Button { Text = "Currencyleri Sifirla", AutoSize = true };
         resetCurrencyButton.Click += (_, _) => ResetCurrencyPoints();
@@ -386,6 +447,7 @@ public sealed class MainForm : Form
         pointsGrid.Controls.Add(itemButtonsPanel, 2, 1);
 
         pointsGroup.Controls.Add(pointsGrid);
+        FreezeSectionLayout(pointsGroup, pointsGrid, 360);
 
         var modsGroup = new GroupBox
         {
@@ -400,7 +462,9 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 2,
-            AutoSize = true
+            AutoSize = true,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
+            RowCount = 1
         };
         modsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         modsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
@@ -453,6 +517,7 @@ public sealed class MainForm : Form
         modsGrid.Controls.Add(rightModsPanel, 1, 0);
 
         modsGroup.Controls.Add(modsGrid);
+        FreezeSectionLayout(modsGroup, modsGrid, 380);
 
         var actionsPanel = new FlowLayoutPanel
         {
@@ -481,11 +546,21 @@ public sealed class MainForm : Form
 
         var helpLabel = new Label
         {
-            Text = "F6 currency noktalarini sirayla kaydeder. F7 her basista yeni item noktasi ekler. Esc dahil fare veya klavye hareketi islemi durdurur.",
+            Text = "F6 alteration noktasi ekler. F10 augment noktasini kaydeder. F7 her basista yeni item noktasi ekler. Esc dahil fare veya klavye hareketi islemi durdurur.",
             AutoSize = true,
             Margin = new Padding(18, 8, 0, 0)
         };
         actionsPanel.Controls.Add(helpLabel);
+
+        _showCopiedTextCheckBox = new CheckBox
+        {
+            AutoSize = true,
+            Checked = _config.Logging.ShowCopiedText,
+            Text = "Kopyalanan metni logla",
+            Margin = new Padding(18, 8, 0, 0)
+        };
+        _showCopiedTextCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
+        actionsPanel.Controls.Add(_showCopiedTextCheckBox);
 
         var logGroup = new GroupBox
         {
@@ -503,20 +578,68 @@ public sealed class MainForm : Form
         };
         logGroup.Controls.Add(_logTextBox);
 
-        ((Panel)settingsTab.Controls[0]).Controls.Add(settingsGroup);
-        ((Panel)settingsTabTwo.Controls[0]).Controls.Add(settingsGroupTwo);
-        ((Panel)augmentTab.Controls[0]).Controls.Add(augmentGroup);
-        ((Panel)timingTab.Controls[0]).Controls.Add(timingGroup);
-        ((Panel)pointsTab.Controls[0]).Controls.Add(pointsGroup);
-        ((Panel)modsTab.Controls[0]).Controls.Add(modsGroup);
-        tabs.TabPages.Add(settingsTab);
-        tabs.TabPages.Add(settingsTabTwo);
-        tabs.TabPages.Add(augmentTab);
-        tabs.TabPages.Add(timingTab);
-        tabs.TabPages.Add(pointsTab);
-        tabs.TabPages.Add(modsTab);
+        settingsTab.Controls.Add(settingsGroup);
+        settingsTabTwo.Controls.Add(settingsGroupTwo);
+        augmentTab.Controls.Add(augmentGroup);
+        timingTab.Controls.Add(timingGroup);
+        pointsTab.Controls.Add(pointsGroup);
+        modsTab.Controls.Add(modsGroup);
 
-        panel1Container.Controls.Add(tabs);
+        var sections = new (string Title, Panel Panel)[]
+        {
+            ("Craft Ayarlari 1", settingsTab),
+            ("Craft Ayarlari 2", settingsTabTwo),
+            ("Augment", augmentTab),
+            ("Zamanlama", timingTab),
+            ("Noktalar", pointsTab),
+            ("Kayitli Modlar", modsTab)
+        };
+
+        Button? activeSectionButton = null;
+
+        void ShowSection(Panel selectedPanel, Button clickedButton)
+        {
+            foreach (var section in sections)
+            {
+                section.Panel.Visible = ReferenceEquals(section.Panel, selectedPanel);
+            }
+
+            selectedPanel.BringToFront();
+
+            if (activeSectionButton is not null)
+            {
+                activeSectionButton.BackColor = SystemColors.Control;
+                activeSectionButton.ForeColor = SystemColors.ControlText;
+            }
+
+            activeSectionButton = clickedButton;
+            activeSectionButton.BackColor = Color.White;
+            activeSectionButton.ForeColor = Color.Black;
+        }
+
+        foreach (var section in sections)
+        {
+            section.Panel.Dock = DockStyle.Fill;
+            section.Panel.Visible = false;
+            contentHost.Controls.Add(section.Panel);
+
+            var button = new Button
+            {
+                Text = section.Title,
+                AutoSize = true,
+                Margin = new Padding(0, 0, 6, 0)
+            };
+            button.Click += (_, _) => ShowSection(section.Panel, button);
+            sectionBar.Controls.Add(button);
+
+            if (activeSectionButton is null)
+            {
+                ShowSection(section.Panel, button);
+            }
+        }
+
+        panel1Container.Controls.Add(contentHost);
+        panel1Container.Controls.Add(sectionBar);
         panel1Container.Controls.Add(actionsPanel);
 
         splitContainer.Panel1.Controls.Add(panel1Container);
@@ -524,6 +647,15 @@ public sealed class MainForm : Form
         splitContainer.Panel2.Controls.Add(logGroup);
 
         Controls.Add(splitContainer);
+
+        contentHost.ResumeLayout(false);
+        sectionBar.ResumeLayout(false);
+        sectionBar.PerformLayout();
+        panel1Container.ResumeLayout(false);
+        splitContainer.Panel2.ResumeLayout(false);
+        splitContainer.Panel1.ResumeLayout(false);
+        splitContainer.ResumeLayout(false);
+        ResumeLayout(false);
 
         Shown += (_, _) =>
         {
@@ -535,11 +667,15 @@ public sealed class MainForm : Form
             {
                 splitContainer.SplitterDistance = targetDistance;
             }
+
+            BeginInvoke(new Action(() =>
+            {
+                RefreshSavedModsUi();
+                StartIncrementalControlWarmup(sections.Skip(1).Select(section => (Control)section.Panel).ToList());
+            }));
         };
 
-        _nextCurrencyCaptureKind = DetermineNextCurrencyCaptureKind();
         RefreshPointLabels();
-        RefreshSavedModsUi();
         HookMonitorEvents();
         _monitor.Start();
         NativeMethods.AddClipboardFormatListener(Handle);
@@ -562,6 +698,7 @@ public sealed class MainForm : Form
         _monitor.StartRequested += () => InvokeOnUi(StartRun);
         _monitor.StopRequested += () => InvokeOnUi(() => StopCurrentRun("Durdurma istendi."));
         _monitor.CaptureSourceRequested += () => InvokeOnUi(() => CapturePoint(PointKind.Source));
+        _monitor.CaptureSecondarySourceRequested += () => InvokeOnUi(() => CapturePoint(PointKind.SecondarySource));
         _monitor.CaptureTargetRequested += () => InvokeOnUi(() => CapturePoint(PointKind.Target));
     }
 
@@ -584,10 +721,10 @@ public sealed class MainForm : Form
                 return;
             }
 
-            if (IsUnset(_config.SourcePoint))
+            if (_config.AlterationPoints.Count == 0)
             {
                 SystemSounds.Exclamation.Play();
-                AppendLog("Once alteration noktasini kaydetmelisin.");
+                AppendLog("Once en az bir alteration noktasi kaydetmelisin.");
                 return;
             }
 
@@ -623,7 +760,7 @@ public sealed class MainForm : Form
             SetRunningState(true);
             AppendLog($"Baslatma istendi. Calisacak akis: {(useAugmentCycle ? "Alteration + Augment" : "Sadece Alteration")}");
             ShowRunStatusOverlay();
-            UpdateRunStatusOverlay(new RunProgress(0, 0));
+            UpdateRunStatusOverlay(new RunProgress(0, 0, 0));
 
             _currentRun = Task.Run(async () =>
             {
@@ -702,6 +839,7 @@ public sealed class MainForm : Form
 
         _config.ClipboardCheck.UseAugmentCycle = _useAugmentCycleCheckBox.Checked;
         _config.MaxClicksPerItemRound = Decimal.ToInt32(_maxClicksPerItemRoundInput.Value);
+        _config.MaxAlterationsPerSourcePoint = Decimal.ToInt32(_maxAlterationsPerSourcePointInput.Value);
 
         var firstActiveRule = _config.ClipboardCheck.GetActiveRules().FirstOrDefault();
         _config.ClipboardCheck.MustContain = firstActiveRule?.Text ?? string.Empty;
@@ -729,7 +867,13 @@ public sealed class MainForm : Form
         switch (pointKind)
         {
             case PointKind.Source:
-                CaptureCurrencyPoint(x, y);
+                _config.AlterationPoints.Add(new PointConfig { X = x, Y = y });
+                AppendLog($"Alteration noktasi eklendi ({_config.AlterationPoints.Count}. sira): {x}, {y}");
+                break;
+            case PointKind.SecondarySource:
+                _config.SecondarySourcePoint.X = x;
+                _config.SecondarySourcePoint.Y = y;
+                AppendLog($"Augment noktasi kaydedildi: {x}, {y}");
                 break;
             case PointKind.Target:
                 _config.TargetPoints.Add(new PointConfig { X = x, Y = y });
@@ -774,13 +918,19 @@ public sealed class MainForm : Form
     {
         _currencyPointsListBox.BeginUpdate();
         _currencyPointsListBox.Items.Clear();
-        _currencyPointsListBox.Items.Add($"1. Alteration: {FormatPoint(_config.SourcePoint)}");
-        _currencyPointsListBox.Items.Add($"2. Augment: {FormatPoint(_config.SecondarySourcePoint)}");
+        if (_config.AlterationPoints.Count == 0)
+        {
+            _currencyPointsListBox.Items.Add("Alteration noktasi secili degil");
+        }
+        else
+        {
+            for (var i = 0; i < _config.AlterationPoints.Count; i++)
+            {
+                _currencyPointsListBox.Items.Add($"{i + 1}. Alteration: {FormatPoint(_config.AlterationPoints[i])}");
+            }
+        }
         _currencyPointsListBox.EndUpdate();
-
-        _nextCurrencyCaptureLabel.Text = _nextCurrencyCaptureKind == PointKind.Source
-            ? "Siradaki F6: Alteration noktasi"
-            : "Siradaki F6: Augment noktasi";
+        _augmentPointLabel.Text = $"Augment: {FormatPoint(_config.SecondarySourcePoint)}";
         _targetLabel.Text = $"{_config.TargetPoints.Count} item noktasi secili";
 
         _targetPointsListBox.BeginUpdate();
@@ -807,29 +957,26 @@ public sealed class MainForm : Form
         AppendLog($"Tamamlanan item listeden kaldirildi: {FormatPoint(completedPoint)}");
     }
 
-    private void CaptureCurrencyPoint(int x, int y)
+    private void RemoveLastAlterationPoint()
     {
-        if (_nextCurrencyCaptureKind == PointKind.Source)
+        if (_config.AlterationPoints.Count == 0)
         {
-            _config.SourcePoint.X = x;
-            _config.SourcePoint.Y = y;
-            AppendLog($"Alteration noktasi kaydedildi: {x}, {y}");
-            _nextCurrencyCaptureKind = PointKind.SecondarySource;
+            AppendLog("Silinecek alteration noktasi yok.");
+            return;
         }
-        else
-        {
-            _config.SecondarySourcePoint.X = x;
-            _config.SecondarySourcePoint.Y = y;
-            AppendLog($"Augment noktasi kaydedildi: {x}, {y}");
-            _nextCurrencyCaptureKind = PointKind.Source;
-        }
+
+        var removedPoint = _config.AlterationPoints[^1];
+        _config.AlterationPoints.RemoveAt(_config.AlterationPoints.Count - 1);
+        ConfigLoader.Save(_configPath, _config);
+        RefreshPointLabels();
+        AppendLog($"Son alteration noktasi silindi: {FormatPoint(removedPoint)}");
     }
 
     private void ResetCurrencyPoints()
     {
+        _config.AlterationPoints.Clear();
         _config.SourcePoint = new PointConfig();
         _config.SecondarySourcePoint = new PointConfig();
-        _nextCurrencyCaptureKind = PointKind.Source;
         ConfigLoader.Save(_configPath, _config);
         RefreshPointLabels();
         AppendLog("Currency noktalari sifirlandi.");
@@ -1089,7 +1236,8 @@ public sealed class MainForm : Form
             .AppendLine($"Alteration Modlari: {(activeRules.Count == 0 ? "Aktif aranan mod yok" : string.Join(" | ", activeRules))}")
             .AppendLine($"Augment Modlari: {(activeAugmentRules.Count == 0 ? "Aktif augment modu yok" : string.Join(" | ", activeAugmentRules))}")
             .AppendLine($"Item Tur Limiti: {_config.MaxClicksPerItemRound}")
-            .AppendLine($"Alteration Noktasi: {FormatPoint(_config.SourcePoint)}")
+            .AppendLine($"Alteration Nokta Limiti: {_config.MaxAlterationsPerSourcePoint}")
+            .AppendLine($"Alteration Noktalari: {(_config.AlterationPoints.Count == 0 ? "Secili alteration noktasi yok" : string.Join(" | ", _config.AlterationPoints.Select((point, index) => $"{index + 1}. {FormatPoint(point)}")))}")
             .AppendLine($"Augment Akisi: {(_config.ClipboardCheck.UseAugmentCycle ? "Acik" : "Kapali")}")
             .AppendLine($"Augment Noktasi: {FormatPoint(_config.SecondarySourcePoint)}")
             .AppendLine($"Item Noktalari: {targetPointsText}")
@@ -1180,7 +1328,7 @@ public sealed class MainForm : Form
         }
 
         _runStatusOverlay.PositionOnScreen();
-        _runStatusOverlay.UpdateProgress(0, 0);
+        _runStatusOverlay.UpdateProgress(0, 0, 0);
 
         if (!_runStatusOverlay.Visible)
         {
@@ -1205,7 +1353,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        _runStatusOverlay.UpdateProgress(progress.TotalClicks, progress.CompletedItems);
+        _runStatusOverlay.UpdateProgress(progress.TotalClicks, progress.CompletedItems, progress.StuckItems);
     }
 
     private bool HasThresholdRuleWithoutValue()
@@ -1249,6 +1397,61 @@ public sealed class MainForm : Form
         return new DelayRange(Decimal.ToInt32(minInput.Value), Decimal.ToInt32(maxInput.Value));
     }
 
+    private static void FreezeSectionLayout(GroupBox group, Control content, int height)
+    {
+        group.AutoSize = false;
+        group.Height = height;
+        content.AutoSize = false;
+        content.Height = Math.Max(0, height - 40);
+    }
+
+    private static void EnableDoubleBuffering(Control control)
+    {
+        typeof(Control)
+            .GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?.SetValue(control, true);
+    }
+
+    private void StartIncrementalControlWarmup(IReadOnlyList<Control> roots)
+    {
+        if (roots.Count == 0)
+        {
+            return;
+        }
+
+        var queue = new Queue<Control>(roots);
+        var starter = new System.Windows.Forms.Timer { Interval = 350 };
+        System.Windows.Forms.Timer? worker = null;
+
+        starter.Tick += (_, _) =>
+        {
+            starter.Stop();
+            starter.Dispose();
+
+            worker = new System.Windows.Forms.Timer { Interval = 15 };
+            worker.Tick += (_, _) =>
+            {
+                if (IsDisposed || queue.Count == 0)
+                {
+                    worker.Stop();
+                    worker.Dispose();
+                    return;
+                }
+
+                var control = queue.Dequeue();
+                var handle = control.Handle;
+                foreach (Control child in control.Controls)
+                {
+                    queue.Enqueue(child);
+                }
+            };
+
+            worker.Start();
+        };
+
+        starter.Start();
+    }
+
     private void AddMatchRuleRows(TableLayoutPanel grid, int startIndex, int count)
     {
         for (var offset = 0; offset < count; offset++)
@@ -1266,7 +1469,8 @@ public sealed class MainForm : Form
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                AutoSize = true
+                AutoSize = false,
+                Height = 30
             };
             rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
@@ -1322,7 +1526,8 @@ public sealed class MainForm : Form
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                AutoSize = true
+                AutoSize = false,
+                Height = 30
             };
             rowPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             rowPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
@@ -1352,18 +1557,16 @@ public sealed class MainForm : Form
         }
     }
 
-    private static TabPage CreateTabPage(string title)
+    private static Panel CreateSectionPanel()
     {
-        var tab = new TabPage(title);
         var panel = new Panel
         {
             Dock = DockStyle.Fill,
-            AutoScroll = true,
+            AutoScroll = false,
             Padding = new Padding(8)
         };
 
-        tab.Controls.Add(panel);
-        return tab;
+        return panel;
     }
 
     private enum PointKind
@@ -1376,21 +1579,6 @@ public sealed class MainForm : Form
     private static bool IsUnset(PointConfig point)
     {
         return point.X == 0 && point.Y == 0;
-    }
-
-    private PointKind DetermineNextCurrencyCaptureKind()
-    {
-        if (IsUnset(_config.SourcePoint))
-        {
-            return PointKind.Source;
-        }
-
-        if (IsUnset(_config.SecondarySourcePoint))
-        {
-            return PointKind.SecondarySource;
-        }
-
-        return PointKind.Source;
     }
 
     private sealed record ModeOption(string Value, string Label)

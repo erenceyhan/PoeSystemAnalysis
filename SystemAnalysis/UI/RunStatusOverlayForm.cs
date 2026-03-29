@@ -6,6 +6,7 @@ public sealed class RunStatusOverlayForm : Form
 {
     private readonly Label _clickCountValueLabel;
     private readonly Label _completedItemsValueLabel;
+    private readonly Label _stuckItemsValueLabel;
 
     public RunStatusOverlayForm()
     {
@@ -16,16 +17,18 @@ public sealed class RunStatusOverlayForm : Form
         BackColor = Color.FromArgb(18, 18, 18);
         ForeColor = Color.White;
         Opacity = 0.92;
-        Size = new Size(320, 220);
+        Size = new Size(320, 320);
         Padding = new Padding(20);
 
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4
+            RowCount = 6
         };
 
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -70,18 +73,41 @@ public sealed class RunStatusOverlayForm : Form
             TextAlign = ContentAlignment.MiddleLeft
         };
 
+        var stuckLabel = new Label
+        {
+            Text = "Takilan Item",
+            AutoSize = false,
+            Width = 260,
+            Font = new Font("Segoe UI", 12, FontStyle.Bold),
+            ForeColor = Color.Gainsboro,
+            Margin = new Padding(0, 16, 0, 0)
+        };
+        _stuckItemsValueLabel = new Label
+        {
+            Text = "0",
+            AutoSize = false,
+            Width = 260,
+            Height = 48,
+            Font = new Font("Segoe UI", 32, FontStyle.Bold),
+            ForeColor = Color.White,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
         layout.Controls.Add(clickLabel, 0, 0);
         layout.Controls.Add(_clickCountValueLabel, 0, 1);
         layout.Controls.Add(completedLabel, 0, 2);
         layout.Controls.Add(_completedItemsValueLabel, 0, 3);
+        layout.Controls.Add(stuckLabel, 0, 4);
+        layout.Controls.Add(_stuckItemsValueLabel, 0, 5);
 
         Controls.Add(layout);
     }
 
-    public void UpdateProgress(int totalClicks, int completedItems)
+    public void UpdateProgress(int totalClicks, int completedItems, int stuckItems)
     {
         _clickCountValueLabel.Text = totalClicks.ToString();
         _completedItemsValueLabel.Text = completedItems.ToString();
+        _stuckItemsValueLabel.Text = stuckItems.ToString();
     }
 
     public void PositionOnScreen()

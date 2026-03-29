@@ -14,8 +14,12 @@ public sealed class AnalysisRunner
     private readonly Action<RunProgress>? _progressChanged;
     private readonly Random _random = new();
     private readonly List<ItemRunSummary> _allItems = new();
+    private readonly List<AlterationPointState> _alterationPoints = new();
     private readonly Stopwatch _totalStopwatch = Stopwatch.StartNew();
     private bool _summaryLogged;
+    private bool _alterationSourcesExhausted;
+    private const int SameTextStashThreshold = 3;
+    private const int ConsecutiveStuckItemsBeforeSourceSwitch = 2;
 
     public AnalysisRunner(AppConfig config, Action<string>? log = null, Action<PointConfig>? itemCompleted = null, Action<RunProgress>? progressChanged = null)
     {
@@ -46,6 +50,11 @@ public sealed class AnalysisRunner
             {
                 _allItems.Add(new ItemRunSummary(i + 1, _config.TargetPoints[i]));
             }
+            _alterationPoints.Clear();
+            for (var i = 0; i < _config.AlterationPoints.Count; i++)
+            {
+                _alterationPoints.Add(new AlterationPointState(i + 1, _config.AlterationPoints[i]));
+            }
             ReportProgress();
 
             var pendingItems = new List<ItemRunSummary>(_allItems);
@@ -61,13 +70,15 @@ public sealed class AnalysisRunner
                     cancellationToken.ThrowIfCancellationRequested();
 
                     currentItem = item;
+                    item.LastStuckDuringAlteration = false;
+                    item.LastAlterationPointIndex = null;
                     item.ActiveStopwatch.Start();
                     Log($"Item {item.Index}/{_allItems.Count} turu basladi: {FormatPoint(item.Point)} | Bu tur limit: {maxClicksPerRound} sol tik");
 
-                    bool completed;
+                    ItemRunOutcome outcome;
                     try
                     {
-                        completed = _config.ClipboardCheck.UseAugmentCycle
+                        outcome = _config.ClipboardCheck.UseAugmentCycle
                             ? await RunAlterationAugmentCycleForItemAsync(item, maxClicksPerRound, cancellationToken)
                             : await RunHoldShiftSpamForItemAsync(item, maxClicksPerRound, cancellationToken);
                     }
@@ -76,13 +87,25 @@ public sealed class AnalysisRunner
                         item.ActiveStopwatch.Stop();
                     }
 
-                    if (completed)
+                    UpdateAlterationPointStatusAfterItem(item, outcome);
+
+                    if (outcome == ItemRunOutcome.Completed)
                     {
                         item.Completed = true;
+                        await SendCompletedItemToStashAsync(item, cancellationToken);
                         pendingItems.Remove(item);
                         _itemCompleted?.Invoke(item.Point);
                         ReportProgress();
                         LogItemSummary(item, "tamamlandi");
+                    }
+                    else if (outcome == ItemRunOutcome.StashedAsStuck)
+                    {
+                        item.StashedAsStuck = true;
+                        await SendStuckItemToStashAsync(item, cancellationToken);
+                        pendingItems.Remove(item);
+                        _itemCompleted?.Invoke(item.Point);
+                        ReportProgress();
+                        LogItemSummary(item, "takildi, stashe gonderildi");
                     }
                     else if (!cancellationToken.IsCancellationRequested)
                     {
@@ -90,6 +113,12 @@ public sealed class AnalysisRunner
                     }
 
                     currentItem = null;
+
+                    if (_alterationSourcesExhausted)
+                    {
+                        Log("Tum alteration noktalarinin limiti doldu. Islem durduruluyor.");
+                        return;
+                    }
                 }
 
                 if (!cancellationToken.IsCancellationRequested && pendingItems.Count > 0)
@@ -116,53 +145,77 @@ public sealed class AnalysisRunner
         }
     }
 
-    private async Task<bool> RunHoldShiftSpamForItemAsync(ItemRunSummary item, int maxClicksThisRound, CancellationToken cancellationToken)
+    private async Task<ItemRunOutcome> RunHoldShiftSpamForItemAsync(ItemRunSummary item, int maxClicksThisRound, CancellationToken cancellationToken)
     {
-        var shiftHeld = false;
         item.LastRoundClicks = 0;
 
-        try
+        while (!cancellationToken.IsCancellationRequested && item.LastRoundClicks < maxClicksThisRound)
         {
-            Log($"Item {item.Index}: Alteration noktasina sag tik yapiliyor.");
-            RightClick(_config.SourcePoint);
-            await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
-
-            Log($"Item {item.Index}: Shift tusu basili tutuluyor.");
-            InputController.KeyDown(NativeMethods.VK_SHIFT);
-            shiftHeld = true;
-            await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
-
-            while (!cancellationToken.IsCancellationRequested && item.LastRoundClicks < maxClicksThisRound)
+            var alterationPoint = GetAvailableAlterationPoint(item.Index);
+            if (alterationPoint is null)
             {
-                Log($"Item {item.Index}: Shift basili sol tik yapiliyor.");
-                LeftClick(item.Point);
-                item.AlterationUses++;
-                item.TotalItemClicks++;
-                item.LastRoundClicks++;
-                ReportProgress();
-                await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
+                return ItemRunOutcome.ContinueNextRound;
+            }
 
-                var inspection = await InspectAsync(item, cancellationToken);
-                if (inspection.HasDesiredMod)
+            item.LastAlterationPointIndex = alterationPoint.Index;
+
+            var shiftHeld = false;
+            try
+            {
+                Log($"Item {item.Index}: Alteration noktasi {alterationPoint.Index} secildi, sag tik yapiliyor.");
+                RightClick(alterationPoint.Point);
+                await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+
+                Log($"Item {item.Index}: Shift tusu basili tutuluyor.");
+                InputController.KeyDown(NativeMethods.VK_SHIFT);
+                shiftHeld = true;
+                await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+
+                while (!cancellationToken.IsCancellationRequested && item.LastRoundClicks < maxClicksThisRound)
                 {
-                    Log($"Item {item.Index}: Hedef mod bulundu.");
-                    return true;
+                    if (alterationPoint.Uses >= _config.MaxAlterationsPerSourcePoint)
+                    {
+                        Log($"Item {item.Index}: Alteration noktasi {alterationPoint.Index} limitine ulasti. Yeni noktaya gecilecek.");
+                        break;
+                    }
+
+                    Log($"Item {item.Index}: Shift basili sol tik yapiliyor.");
+                    LeftClick(item.Point);
+                    item.AlterationUses++;
+                    item.TotalItemClicks++;
+                    item.LastRoundClicks++;
+                    alterationPoint.Uses++;
+                    ReportProgress();
+                    await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
+
+                    var inspection = await InspectAsync(item, cancellationToken);
+                    if (inspection.IsStuck)
+                    {
+                        item.LastStuckDuringAlteration = true;
+                        return ItemRunOutcome.StashedAsStuck;
+                    }
+
+                    if (inspection.HasDesiredMod)
+                    {
+                        Log($"Item {item.Index}: Hedef mod bulundu.");
+                        return ItemRunOutcome.Completed;
+                    }
                 }
             }
-
-            return false;
-        }
-        finally
-        {
-            if (shiftHeld)
+            finally
             {
-                InputController.KeyUp(NativeMethods.VK_SHIFT);
-                Log($"Item {item.Index}: Shift tusu birakildi.");
+                if (shiftHeld)
+                {
+                    InputController.KeyUp(NativeMethods.VK_SHIFT);
+                    Log($"Item {item.Index}: Shift tusu birakildi.");
+                }
             }
         }
+
+        return ItemRunOutcome.ContinueNextRound;
     }
 
-    private async Task<bool> RunAlterationAugmentCycleForItemAsync(ItemRunSummary item, int maxClicksThisRound, CancellationToken cancellationToken)
+    private async Task<ItemRunOutcome> RunAlterationAugmentCycleForItemAsync(ItemRunSummary item, int maxClicksThisRound, CancellationToken cancellationToken)
     {
         var roundState = new RoundState();
         item.LastRoundClicks = 0;
@@ -174,7 +227,13 @@ public sealed class AnalysisRunner
             if (alterationInspection is null)
             {
                 item.LastRoundClicks = roundState.Clicks;
-                return false;
+                return ItemRunOutcome.ContinueNextRound;
+            }
+
+            if (alterationInspection.IsStuck)
+            {
+                item.LastRoundClicks = roundState.Clicks;
+                return ItemRunOutcome.StashedAsStuck;
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -182,7 +241,7 @@ public sealed class AnalysisRunner
             if (roundState.Clicks >= maxClicksThisRound)
             {
                 item.LastRoundClicks = roundState.Clicks;
-                return false;
+                return ItemRunOutcome.ContinueNextRound;
             }
 
             Log($"Item {item.Index}: Desired mod bulundu, augment asamasina geciliyor.");
@@ -190,13 +249,20 @@ public sealed class AnalysisRunner
             if (!augmentApplied)
             {
                 item.LastRoundClicks = roundState.Clicks;
-                return false;
+                return ItemRunOutcome.ContinueNextRound;
             }
 
             cancellationToken.ThrowIfCancellationRequested();
 
             Log($"Item {item.Index}: Augment sonrasi kontrol basliyor.");
             var inspection = await InspectAsync(item, cancellationToken);
+            if (inspection.IsStuck)
+            {
+                item.LastStuckDuringAlteration = false;
+                item.LastRoundClicks = roundState.Clicks;
+                return ItemRunOutcome.StashedAsStuck;
+            }
+
             var augmentRules = _config.ClipboardCheck.GetActiveAugmentRules().ToList();
             var matchedAugmentRule = augmentRules.FirstOrDefault(rule => IsRuleMatch(rule, inspection.Segments, inspection.Comparison, out _));
 
@@ -205,7 +271,7 @@ public sealed class AnalysisRunner
                 IsRuleMatch(matchedAugmentRule, inspection.Segments, inspection.Comparison, out var matchedAugmentText);
                 item.LastRoundClicks = roundState.Clicks;
                 Log($"Item {item.Index}: Flask tamamlandi. Alteration modu: '{inspection.MatchedRuleText}' | Augment modu: '{matchedAugmentText}'");
-                return true;
+                return ItemRunOutcome.Completed;
             }
 
             var missingParts = new List<string>();
@@ -223,52 +289,75 @@ public sealed class AnalysisRunner
         }
 
         item.LastRoundClicks = roundState.Clicks;
-        return false;
+        return ItemRunOutcome.ContinueNextRound;
     }
 
     private async Task<InspectionResult?> ApplyAlterationUntilDesiredModAsync(ItemRunSummary item, RoundState roundState, int maxClicksThisRound, CancellationToken cancellationToken)
     {
-        var shiftHeld = false;
-
-        try
+        while (!cancellationToken.IsCancellationRequested && roundState.Clicks < maxClicksThisRound)
         {
-            Log($"Item {item.Index}: Alteration noktasina sag tik yapiliyor.");
-            RightClick(_config.SourcePoint);
-            await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
-
-            Log($"Item {item.Index}: Shift tusu basili tutuluyor.");
-            InputController.KeyDown(NativeMethods.VK_SHIFT);
-            shiftHeld = true;
-            await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
-
-            while (!cancellationToken.IsCancellationRequested && roundState.Clicks < maxClicksThisRound)
+            var alterationPoint = GetAvailableAlterationPoint(item.Index);
+            if (alterationPoint is null)
             {
-                Log($"Item {item.Index}: Alteration icin Shift basili sol tik yapiliyor.");
-                LeftClick(item.Point);
-                item.AlterationUses++;
-                item.TotalItemClicks++;
-                roundState.Clicks++;
-                ReportProgress();
-                await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
+                return null;
+            }
 
-                var inspection = await InspectAsync(item, cancellationToken);
-                if (inspection.HasDesiredMod)
+            item.LastAlterationPointIndex = alterationPoint.Index;
+
+            var shiftHeld = false;
+            try
+            {
+                Log($"Item {item.Index}: Alteration noktasi {alterationPoint.Index} secildi, sag tik yapiliyor.");
+                RightClick(alterationPoint.Point);
+                await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+
+                Log($"Item {item.Index}: Shift tusu basili tutuluyor.");
+                InputController.KeyDown(NativeMethods.VK_SHIFT);
+                shiftHeld = true;
+                await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+
+                while (!cancellationToken.IsCancellationRequested && roundState.Clicks < maxClicksThisRound)
                 {
-                    Log($"Item {item.Index}: Alteration asamasi basarili. Eslesen mod: '{inspection.MatchedRuleText}'");
-                    return inspection;
+                    if (alterationPoint.Uses >= _config.MaxAlterationsPerSourcePoint)
+                    {
+                        Log($"Item {item.Index}: Alteration noktasi {alterationPoint.Index} limitine ulasti. Yeni noktaya gecilecek.");
+                        break;
+                    }
+
+                    Log($"Item {item.Index}: Alteration icin Shift basili sol tik yapiliyor.");
+                    LeftClick(item.Point);
+                    item.AlterationUses++;
+                    item.TotalItemClicks++;
+                    roundState.Clicks++;
+                    alterationPoint.Uses++;
+                    ReportProgress();
+                    await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
+
+                    var inspection = await InspectAsync(item, cancellationToken);
+                    if (inspection.IsStuck)
+                    {
+                        item.LastStuckDuringAlteration = true;
+                        return inspection;
+                    }
+
+                    if (inspection.HasDesiredMod)
+                    {
+                        Log($"Item {item.Index}: Alteration asamasi basarili. Eslesen mod: '{inspection.MatchedRuleText}'");
+                        return inspection;
+                    }
                 }
             }
-
-            return null;
-        }
-        finally
-        {
-            if (shiftHeld)
+            finally
             {
-                InputController.KeyUp(NativeMethods.VK_SHIFT);
-                Log($"Item {item.Index}: Shift tusu birakildi.");
+                if (shiftHeld)
+                {
+                    InputController.KeyUp(NativeMethods.VK_SHIFT);
+                    Log($"Item {item.Index}: Shift tusu birakildi.");
+                }
             }
         }
+
+        return null;
     }
 
     private async Task<bool> ApplySingleAugmentAsync(ItemRunSummary item, RoundState roundState, int maxClicksThisRound, CancellationToken cancellationToken)
@@ -313,6 +402,19 @@ public sealed class AnalysisRunner
         var comparison = _config.ClipboardCheck.CaseSensitive
             ? StringComparison.Ordinal
             : StringComparison.OrdinalIgnoreCase;
+        var normalizedText = NormalizeClipboardText(currentText);
+        var sameTextCount = TrackRepeatedInspectionText(item, normalizedText);
+        if (sameTextCount >= 2)
+        {
+            Log($"Item {item.Index}: Ayni metin tekrar sayisi {sameTextCount}/{SameTextStashThreshold}.");
+        }
+
+        if (sameTextCount >= SameTextStashThreshold)
+        {
+            Log($"Item {item.Index}: Ayni metin {SameTextStashThreshold} kez ust uste geldi. Item takildi kabul edilip stashe gonderilecek.");
+            return new InspectionResult(false, string.Empty, Array.Empty<string>(), comparison, true);
+        }
+
         var segments = GetClipboardSegments(currentText);
         var rules = _config.ClipboardCheck.GetActiveRules().ToList();
         var matchedRule = rules.FirstOrDefault(rule => IsRuleMatch(rule, segments, comparison, out _));
@@ -321,14 +423,14 @@ public sealed class AnalysisRunner
         {
             IsRuleMatch(matchedRule, segments, comparison, out var matchedText);
             Log($"Item {item.Index}: Eslesme bulundu: '{matchedText}'");
-            return new InspectionResult(true, matchedText, segments, comparison);
+            return new InspectionResult(true, matchedText, segments, comparison, false);
         }
 
         var activeText = rules.Count == 0
             ? "Aktif aranan mod yok"
             : string.Join(" | ", rules.Select(FormatRuleForLog));
         Log($"Item {item.Index}: Eslesme yok. Aranan ifadeler: '{activeText}'");
-        return new InspectionResult(false, string.Empty, segments, comparison);
+        return new InspectionResult(false, string.Empty, segments, comparison, false);
     }
 
     private bool IsRuleMatch(MatchRule rule, IReadOnlyList<string> segments, StringComparison comparison, out string matchedText)
@@ -441,6 +543,13 @@ public sealed class AnalysisRunner
             .ToList();
     }
 
+    private static string NormalizeClipboardText(string text)
+    {
+        return text
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Trim();
+    }
+
     private void TriggerClipboardShortcut()
     {
         if (string.Equals(_config.ClipboardCheck.TriggerShortcut, "ctrl+c", StringComparison.OrdinalIgnoreCase))
@@ -500,7 +609,122 @@ public sealed class AnalysisRunner
     {
         _progressChanged?.Invoke(new RunProgress(
             _allItems.Sum(item => item.TotalItemClicks),
-            _allItems.Count(item => item.Completed)));
+            _allItems.Count(item => item.Completed),
+            _allItems.Count(item => item.StashedAsStuck)));
+    }
+
+    private async Task SendCompletedItemToStashAsync(ItemRunSummary item, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        Log($"Item {item.Index}: Tamamlanan item stashe gonderiliyor (Ctrl basili sol tik).");
+        InputController.MoveMouse(item.Point.X, item.Point.Y);
+        await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+        InputController.ModifiedLeftClick(NativeMethods.VK_CONTROL);
+        await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+        Log($"Item {item.Index}: Stash gonderimi tamamlandi.");
+    }
+
+    private async Task SendStuckItemToStashAsync(ItemRunSummary item, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        Log($"Item {item.Index}: Takilan item stashe gonderiliyor (Ctrl basili 3 sol tik).");
+        InputController.MoveMouse(item.Point.X, item.Point.Y);
+        await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+        InputController.KeyDown(NativeMethods.VK_CONTROL);
+
+        try
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                InputController.LeftClick();
+                await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+            }
+        }
+        finally
+        {
+            InputController.KeyUp(NativeMethods.VK_CONTROL);
+        }
+
+        Log($"Item {item.Index}: Takilan item stash gonderimi tamamlandi.");
+    }
+
+    private int TrackRepeatedInspectionText(ItemRunSummary item, string normalizedText)
+    {
+        if (string.Equals(item.LastInspectionText, normalizedText, StringComparison.Ordinal))
+        {
+            item.SameInspectionTextCount++;
+        }
+        else
+        {
+            item.LastInspectionText = normalizedText;
+            item.SameInspectionTextCount = 1;
+        }
+
+        return item.SameInspectionTextCount;
+    }
+
+    private void UpdateAlterationPointStatusAfterItem(ItemRunSummary item, ItemRunOutcome outcome)
+    {
+        if (!item.LastAlterationPointIndex.HasValue)
+        {
+            return;
+        }
+
+        var source = _alterationPoints.FirstOrDefault(point => point.Index == item.LastAlterationPointIndex.Value);
+        if (source is null)
+        {
+            return;
+        }
+
+        if (outcome == ItemRunOutcome.StashedAsStuck && item.LastStuckDuringAlteration)
+        {
+            source.ConsecutiveStuckItems++;
+            Log($"Alteration noktasi {source.Index}: Arka arkaya takilan item sayisi {source.ConsecutiveStuckItems}/{ConsecutiveStuckItemsBeforeSourceSwitch}.");
+
+            if (source.ConsecutiveStuckItems >= ConsecutiveStuckItemsBeforeSourceSwitch)
+            {
+                source.Uses = Math.Max(source.Uses, _config.MaxAlterationsPerSourcePoint);
+                source.ConsecutiveStuckItems = 0;
+                Log($"Alteration noktasi {source.Index}: Arka arkaya {ConsecutiveStuckItemsBeforeSourceSwitch} item takildi. Currency bitti kabul edilip sonraki alteration noktasina gecilecek.");
+            }
+
+            return;
+        }
+
+        if (source.ConsecutiveStuckItems > 0)
+        {
+            Log($"Alteration noktasi {source.Index}: Takilma sayaci sifirlandi.");
+            source.ConsecutiveStuckItems = 0;
+        }
+    }
+
+    private AlterationPointState? GetAvailableAlterationPoint(int itemIndex)
+    {
+        if (_alterationPoints.Count == 0)
+        {
+            _alterationSourcesExhausted = true;
+            Log($"Item {itemIndex}: Kullanilabilir alteration noktasi yok.");
+            return null;
+        }
+
+        for (var attempt = 0; attempt < _alterationPoints.Count; attempt++)
+        {
+            var point = _alterationPoints[0];
+            if (point.Uses < _config.MaxAlterationsPerSourcePoint)
+            {
+                return point;
+            }
+
+            _alterationPoints.RemoveAt(0);
+            _alterationPoints.Add(point);
+            Log($"Alteration noktasi {point.Index} limiti doldu. Siradaki alteration noktasina geciliyor.");
+        }
+
+        _alterationSourcesExhausted = true;
+        Log($"Item {itemIndex}: Tum alteration noktalari limitine ulasti.");
+        return null;
     }
 
     private void LogItemSummary(ItemRunSummary item, string status)
@@ -525,6 +749,8 @@ public sealed class AnalysisRunner
         {
             var status = item.Completed
                 ? "tamamlandi"
+                : item.StashedAsStuck
+                    ? "takildi, stashe gonderildi"
                 : item.TotalItemClicks > 0 ? "yarida kesildi" : "baslamadi";
             Log($"Item {item.Index}: Alteration {item.AlterationUses} | Augment {item.AugmentUses} | Toplam sol tik {item.TotalItemClicks} | Sure: {FormatDuration(item.ActiveStopwatch.Elapsed)} | Durum: {status}");
         }
@@ -534,6 +760,10 @@ public sealed class AnalysisRunner
         Log($"Toplam augment harcamasi: {totalAugments}");
         Log($"Toplam currency harcamasi: {totalAlterations + totalAugments}");
         Log($"Toplam sol tik sayisi: {totalClicks}");
+        foreach (var source in _alterationPoints.OrderBy(point => point.Index))
+        {
+            Log($"Alteration noktasi {source.Index}: {source.Uses}/{_config.MaxAlterationsPerSourcePoint} kullanim | Konum: {FormatPoint(source.Point)}");
+        }
         Log($"Toplam calisma suresi: {FormatDuration(_totalStopwatch.Elapsed)}");
         _summaryLogged = true;
     }
@@ -569,6 +799,18 @@ public sealed class AnalysisRunner
         public int TotalItemClicks { get; set; }
         public int LastRoundClicks { get; set; }
         public bool Completed { get; set; }
+        public bool StashedAsStuck { get; set; }
+        public string LastInspectionText { get; set; } = string.Empty;
+        public int SameInspectionTextCount { get; set; }
+        public int? LastAlterationPointIndex { get; set; }
+        public bool LastStuckDuringAlteration { get; set; }
+    }
+
+    private enum ItemRunOutcome
+    {
+        ContinueNextRound,
+        Completed,
+        StashedAsStuck
     }
 
     private sealed class RoundState
@@ -576,9 +818,24 @@ public sealed class AnalysisRunner
         public int Clicks { get; set; }
     }
 
+    private sealed class AlterationPointState
+    {
+        public AlterationPointState(int index, PointConfig point)
+        {
+            Index = index;
+            Point = point;
+        }
+
+        public int Index { get; }
+        public PointConfig Point { get; }
+        public int Uses { get; set; }
+        public int ConsecutiveStuckItems { get; set; }
+    }
+
     private sealed record InspectionResult(
         bool HasDesiredMod,
         string MatchedRuleText,
         IReadOnlyList<string> Segments,
-        StringComparison Comparison);
+        StringComparison Comparison,
+        bool IsStuck);
 }

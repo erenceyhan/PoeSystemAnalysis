@@ -54,6 +54,28 @@ public static class InputController
         }
     }
 
+    public static void ModifiedLeftClick(params ushort[] modifierKeys)
+    {
+        foreach (var key in modifierKeys)
+        {
+            KeyDown(key);
+            Thread.Sleep(20);
+        }
+
+        try
+        {
+            LeftClick();
+        }
+        finally
+        {
+            for (var i = modifierKeys.Length - 1; i >= 0; i--)
+            {
+                Thread.Sleep(20);
+                KeyUp(modifierKeys[i]);
+            }
+        }
+    }
+
     public static void ReleaseCommonModifiers()
     {
         // Release the most common modifier keys defensively in case a run is
