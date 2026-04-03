@@ -27,7 +27,7 @@ public sealed class MainForm : Form
     private readonly List<TextBox> _matchRuleThresholdTextBoxes = new();
     private readonly List<TextBox> _augmentRuleThresholdTextBoxes = new();
     private readonly ComboBox _modeComboBox;
-    private readonly CheckBox _useAugmentCycleCheckBox;
+    private readonly ComboBox _craftModeComboBox;
     private readonly NumericUpDown _maxClicksPerItemRoundInput;
     private readonly NumericUpDown _maxAlterationsPerSourcePointInput;
     private readonly Label _augmentPointLabel;
@@ -173,15 +173,18 @@ public sealed class MainForm : Form
         _maxAlterationsPerSourcePointInput.ValueChanged += (_, _) => SaveUiToConfig();
         settingsGrid.Controls.Add(_maxAlterationsPerSourcePointInput, 1, 8);
 
-        settingsGrid.Controls.Add(new Label { Text = "Augment Akisi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 9);
-        _useAugmentCycleCheckBox = new CheckBox
+        settingsGrid.Controls.Add(new Label { Text = "Craft Modu", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 9);
+        _craftModeComboBox = new ComboBox
         {
-            AutoSize = true,
-            Checked = _config.ClipboardCheck.UseAugmentCycle,
-            Text = "Flask icin alteration sonrasi augment uygula"
+            Dock = DockStyle.Top,
+            DropDownStyle = ComboBoxStyle.DropDownList
         };
-        _useAugmentCycleCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
-        settingsGrid.Controls.Add(_useAugmentCycleCheckBox, 1, 9);
+        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.SingleAlterationCraftMode, "1 Mod Alteration"));
+        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.FlaskAugmentCraftMode, "Flask Modu"));
+        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.ItemAugmentCraftMode, "2 Mod Alteration + Augment"));
+        SelectCraftMode();
+        _craftModeComboBox.SelectedIndexChanged += (_, _) => SaveUiToConfig();
+        settingsGrid.Controls.Add(_craftModeComboBox, 1, 9);
 
         settingsGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 10);
         var logPathPanel = new TableLayoutPanel
@@ -728,18 +731,45 @@ public sealed class MainForm : Form
                 return;
             }
 
-            if (_useAugmentCycleCheckBox.Checked && IsUnset(_config.SecondarySourcePoint))
+            var selectedCraftMode = GetSelectedCraftMode();
+            var useFlaskAugmentCycle = string.Equals(selectedCraftMode, ClipboardCheckConfig.FlaskAugmentCraftMode, StringComparison.OrdinalIgnoreCase);
+            var useItemAugmentCycle = string.Equals(selectedCraftMode, ClipboardCheckConfig.ItemAugmentCraftMode, StringComparison.OrdinalIgnoreCase);
+
+            if ((useFlaskAugmentCycle || useItemAugmentCycle) && IsUnset(_config.SecondarySourcePoint))
             {
                 SystemSounds.Exclamation.Play();
                 AppendLog("Augment akisi aciksa once augment noktasini kaydetmelisin.");
                 return;
             }
 
-            if (_useAugmentCycleCheckBox.Checked && !_config.ClipboardCheck.GetActiveAugmentRules().Any())
+            if ((useFlaskAugmentCycle || useItemAugmentCycle) && !_config.ClipboardCheck.GetActiveAugmentRules().Any())
             {
                 SystemSounds.Exclamation.Play();
                 AppendLog("Augment akisi aciksa augment sekmesinden en az bir mod secmelisin.");
                 return;
+            }
+
+            if (useItemAugmentCycle && !_config.ClipboardCheck.GetActiveRules().Any())
+            {
+                SystemSounds.Exclamation.Play();
+                AppendLog("Item augment akisi aciksa craft ayarlarindan en az bir mod secmelisin.");
+                return;
+            }
+
+            if (useItemAugmentCycle)
+            {
+                var distinctSelectedMods = _config.ClipboardCheck.GetActiveRules()
+                    .Concat(_config.ClipboardCheck.GetActiveAugmentRules())
+                    .Select(rule => $"{rule.Text.Trim()}|{rule.ThresholdText.Trim()}")
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
+
+                if (distinctSelectedMods < 2)
+                {
+                    SystemSounds.Exclamation.Play();
+                    AppendLog("2 Mod Alteration + Augment icin toplamda en az iki farkli hedef mod secmelisin.");
+                    return;
+                }
             }
 
             if (HasThresholdRuleWithoutValue())
@@ -749,16 +779,30 @@ public sealed class MainForm : Form
                 return;
             }
 
-            var useAugmentCycle = _useAugmentCycleCheckBox.Checked
+            var useAugmentCycle = useFlaskAugmentCycle
                                   && !IsUnset(_config.SecondarySourcePoint)
                                   && _config.ClipboardCheck.GetActiveAugmentRules().Any();
-            _config.ClipboardCheck.UseAugmentCycle = useAugmentCycle;
+            var useItemAugment = useItemAugmentCycle
+                                 && !IsUnset(_config.SecondarySourcePoint)
+                                 && _config.ClipboardCheck.GetActiveAugmentRules().Any()
+                                 && _config.ClipboardCheck.GetActiveRules().Any();
+            _config.ClipboardCheck.CraftMode = useItemAugment
+                ? ClipboardCheckConfig.ItemAugmentCraftMode
+                : useAugmentCycle
+                    ? ClipboardCheckConfig.FlaskAugmentCraftMode
+                    : ClipboardCheckConfig.SingleAlterationCraftMode;
+            _config.ClipboardCheck.Normalize();
 
             _runCancellation = new CancellationTokenSource();
             PrepareRunLogFile();
             _monitor.IsArmed = true;
             SetRunningState(true);
-            AppendLog($"Baslatma istendi. Calisacak akis: {(useAugmentCycle ? "Alteration + Augment" : "Sadece Alteration")}");
+            var flowText = useItemAugment
+                ? "Item icin Mod + Augment"
+                : useAugmentCycle
+                    ? "Alteration + Augment"
+                    : "Sadece Alteration";
+            AppendLog($"Baslatma istendi. Calisacak akis: {flowText}");
             ShowRunStatusOverlay();
             UpdateRunStatusOverlay(new RunProgress(0, 0, 0));
 
@@ -837,7 +881,8 @@ public sealed class MainForm : Form
             _config.ClipboardCheck.AugmentMatchRules[i].ThresholdText = _augmentRuleThresholdTextBoxes[i].Text.Trim();
         }
 
-        _config.ClipboardCheck.UseAugmentCycle = _useAugmentCycleCheckBox.Checked;
+        _config.ClipboardCheck.CraftMode = GetSelectedCraftMode();
+        _config.ClipboardCheck.Normalize();
         _config.MaxClicksPerItemRound = Decimal.ToInt32(_maxClicksPerItemRoundInput.Value);
         _config.MaxAlterationsPerSourcePoint = Decimal.ToInt32(_maxAlterationsPerSourcePointInput.Value);
 
@@ -1185,6 +1230,33 @@ public sealed class MainForm : Form
         }
     }
 
+    private void SelectCraftMode()
+    {
+        foreach (var item in _craftModeComboBox.Items)
+        {
+            if (item is CraftModeOption option && string.Equals(option.Value, _config.ClipboardCheck.CraftMode, StringComparison.OrdinalIgnoreCase))
+            {
+                _craftModeComboBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        if (_craftModeComboBox.Items.Count > 0)
+        {
+            _craftModeComboBox.SelectedIndex = 0;
+        }
+    }
+
+    private string GetSelectedCraftMode()
+    {
+        if (_craftModeComboBox.SelectedItem is CraftModeOption option)
+        {
+            return option.Value;
+        }
+
+        return ClipboardCheckConfig.SingleAlterationCraftMode;
+    }
+
     private void AppendLogThreadSafe(string message)
     {
         InvokeOnUi(() => AppendLog(message));
@@ -1238,7 +1310,7 @@ public sealed class MainForm : Form
             .AppendLine($"Item Tur Limiti: {_config.MaxClicksPerItemRound}")
             .AppendLine($"Alteration Nokta Limiti: {_config.MaxAlterationsPerSourcePoint}")
             .AppendLine($"Alteration Noktalari: {(_config.AlterationPoints.Count == 0 ? "Secili alteration noktasi yok" : string.Join(" | ", _config.AlterationPoints.Select((point, index) => $"{index + 1}. {FormatPoint(point)}")))}")
-            .AppendLine($"Augment Akisi: {(_config.ClipboardCheck.UseAugmentCycle ? "Acik" : "Kapali")}")
+            .AppendLine($"Craft Modu: {GetAugmentFlowDescription()}")
             .AppendLine($"Augment Noktasi: {FormatPoint(_config.SecondarySourcePoint)}")
             .AppendLine($"Item Noktalari: {targetPointsText}")
             .AppendLine(new string('-', 48))
@@ -1258,6 +1330,21 @@ public sealed class MainForm : Form
         {
             File.AppendAllText(_currentLogFilePath, line, Encoding.UTF8);
         }
+    }
+
+    private string GetAugmentFlowDescription()
+    {
+        if (string.Equals(_config.ClipboardCheck.CraftMode, ClipboardCheckConfig.ItemAugmentCraftMode, StringComparison.OrdinalIgnoreCase))
+        {
+            return "2 Mod Alteration + Augment";
+        }
+
+        if (string.Equals(_config.ClipboardCheck.CraftMode, ClipboardCheckConfig.FlaskAugmentCraftMode, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Flask Modu";
+        }
+
+        return "1 Mod Alteration";
     }
 
     protected override void WndProc(ref Message m)
@@ -1582,6 +1669,11 @@ public sealed class MainForm : Form
     }
 
     private sealed record ModeOption(string Value, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private sealed record CraftModeOption(string Value, string Label)
     {
         public override string ToString() => Label;
     }

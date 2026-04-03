@@ -1,0 +1,12 @@
+﻿60% increased Evasion Rating during Effect
+60% increased Armour during Effect
+60% increased Armour during Effect
+14% increased Movement Speed during Effect
+20% additional Elemental Resistances during Effect
+#% Chance to Avoid being Stunned during Effect
+#% Chance to Avoid being Shocked during Effect
+#% increased Critical Strike Chance during Effect
+25% increased effect
+
+
++2 to Level of all Minion Skill Gems

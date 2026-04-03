@@ -78,9 +78,11 @@ public sealed class AnalysisRunner
                     ItemRunOutcome outcome;
                     try
                     {
-                        outcome = _config.ClipboardCheck.UseAugmentCycle
-                            ? await RunAlterationAugmentCycleForItemAsync(item, maxClicksPerRound, cancellationToken)
-                            : await RunHoldShiftSpamForItemAsync(item, maxClicksPerRound, cancellationToken);
+                        outcome = _config.ClipboardCheck.UseItemAugmentCycle
+                            ? await RunItemAugmentCycleForItemAsync(item, maxClicksPerRound, cancellationToken)
+                            : _config.ClipboardCheck.UseAugmentCycle
+                                ? await RunAlterationAugmentCycleForItemAsync(item, maxClicksPerRound, cancellationToken)
+                                : await RunHoldShiftSpamForItemAsync(item, maxClicksPerRound, cancellationToken);
                     }
                     finally
                     {
@@ -292,7 +294,92 @@ public sealed class AnalysisRunner
         return ItemRunOutcome.ContinueNextRound;
     }
 
+    private async Task<ItemRunOutcome> RunItemAugmentCycleForItemAsync(ItemRunSummary item, int maxClicksThisRound, CancellationToken cancellationToken)
+    {
+        var roundState = new RoundState();
+        var craftRules = _config.ClipboardCheck.GetActiveRules().ToList();
+        var augmentRules = _config.ClipboardCheck.GetActiveAugmentRules().ToList();
+        var combinedRules = craftRules.Concat(augmentRules).ToList();
+        item.LastRoundClicks = 0;
+
+        while (!cancellationToken.IsCancellationRequested && roundState.Clicks < maxClicksThisRound)
+        {
+            Log($"Item {item.Index}: Yeni item augment dongusu basliyor.");
+            var initialInspection = await ApplyAlterationUntilMatchAsync(
+                item,
+                roundState,
+                maxClicksThisRound,
+                combinedRules,
+                "Item augment oncesi ilk mod bulundu",
+                cancellationToken);
+            if (initialInspection is null)
+            {
+                item.LastRoundClicks = roundState.Clicks;
+                return ItemRunOutcome.ContinueNextRound;
+            }
+
+            if (initialInspection.IsStuck)
+            {
+                item.LastRoundClicks = roundState.Clicks;
+                return ItemRunOutcome.StashedAsStuck;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (roundState.Clicks >= maxClicksThisRound)
+            {
+                item.LastRoundClicks = roundState.Clicks;
+                return ItemRunOutcome.ContinueNextRound;
+            }
+
+            Log($"Item {item.Index}: Ilk mod bulundu ('{initialInspection.MatchedRuleText}'), item augment asamasina geciliyor.");
+            var augmentApplied = await ApplySingleAugmentAsync(item, roundState, maxClicksThisRound, cancellationToken);
+            if (!augmentApplied)
+            {
+                item.LastRoundClicks = roundState.Clicks;
+                return ItemRunOutcome.ContinueNextRound;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            Log($"Item {item.Index}: Item augment sonrasi kontrol basliyor.");
+            var inspection = await InspectAsync(item, combinedRules, cancellationToken);
+            if (inspection.IsStuck)
+            {
+                item.LastStuckDuringAlteration = false;
+                item.LastRoundClicks = roundState.Clicks;
+                return ItemRunOutcome.StashedAsStuck;
+            }
+
+            var matchedRules = GetDistinctMatchedRuleTexts(combinedRules, inspection.Segments, inspection.Comparison);
+
+            if (matchedRules.Count >= 2)
+            {
+                item.LastRoundClicks = roundState.Clicks;
+                Log($"Item {item.Index}: Item tamamlandi. Bulunan modlar: '{string.Join("' | '", matchedRules)}'");
+                return ItemRunOutcome.Completed;
+            }
+
+            Log($"Item {item.Index}: Item augment sonrasi tamamlanmadi. Bulunan farkli hedef mod sayisi {matchedRules.Count}/2. Alteration dongusu bastan basliyor.");
+        }
+
+        item.LastRoundClicks = roundState.Clicks;
+        return ItemRunOutcome.ContinueNextRound;
+    }
+
     private async Task<InspectionResult?> ApplyAlterationUntilDesiredModAsync(ItemRunSummary item, RoundState roundState, int maxClicksThisRound, CancellationToken cancellationToken)
+    {
+        var rules = _config.ClipboardCheck.GetActiveRules().ToList();
+        return await ApplyAlterationUntilMatchAsync(item, roundState, maxClicksThisRound, rules, "Alteration asamasi basarili", cancellationToken);
+    }
+
+    private async Task<InspectionResult?> ApplyAlterationUntilMatchAsync(
+        ItemRunSummary item,
+        RoundState roundState,
+        int maxClicksThisRound,
+        IReadOnlyList<MatchRule> rules,
+        string successLogPrefix,
+        CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested && roundState.Clicks < maxClicksThisRound)
         {
@@ -333,7 +420,7 @@ public sealed class AnalysisRunner
                     ReportProgress();
                     await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
 
-                    var inspection = await InspectAsync(item, cancellationToken);
+                    var inspection = await InspectAsync(item, rules, cancellationToken);
                     if (inspection.IsStuck)
                     {
                         item.LastStuckDuringAlteration = true;
@@ -342,7 +429,7 @@ public sealed class AnalysisRunner
 
                     if (inspection.HasDesiredMod)
                     {
-                        Log($"Item {item.Index}: Alteration asamasi basarili. Eslesen mod: '{inspection.MatchedRuleText}'");
+                        Log($"Item {item.Index}: {successLogPrefix}. Eslesen mod: '{inspection.MatchedRuleText}'");
                         return inspection;
                     }
                 }
@@ -382,7 +469,12 @@ public sealed class AnalysisRunner
         return true;
     }
 
-    private async Task<InspectionResult> InspectAsync(ItemRunSummary item, CancellationToken cancellationToken)
+    private Task<InspectionResult> InspectAsync(ItemRunSummary item, CancellationToken cancellationToken)
+    {
+        return InspectAsync(item, _config.ClipboardCheck.GetActiveRules().ToList(), cancellationToken);
+    }
+
+    private async Task<InspectionResult> InspectAsync(ItemRunSummary item, IReadOnlyList<MatchRule> rules, CancellationToken cancellationToken)
     {
         Log($"Item {item.Index}: Kontrol icin item noktasina gidiliyor.");
         InputController.MoveMouse(item.Point.X, item.Point.Y);
@@ -416,7 +508,6 @@ public sealed class AnalysisRunner
         }
 
         var segments = GetClipboardSegments(currentText);
-        var rules = _config.ClipboardCheck.GetActiveRules().ToList();
         var matchedRule = rules.FirstOrDefault(rule => IsRuleMatch(rule, segments, comparison, out _));
 
         if (matchedRule is not null)
@@ -532,6 +623,30 @@ public sealed class AnalysisRunner
             : rule.ThresholdText;
 
         return int.TryParse(thresholdText, out minimumPercentage);
+    }
+
+    private List<string> GetDistinctMatchedRuleTexts(IReadOnlyList<MatchRule> rules, IReadOnlyList<string> segments, StringComparison comparison)
+    {
+        var matchedTexts = new List<string>();
+        var seenRuleKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var rule in rules)
+        {
+            if (!IsRuleMatch(rule, segments, comparison, out var matchedText))
+            {
+                continue;
+            }
+
+            var ruleKey = $"{rule.Text.Trim()}|{rule.ThresholdText.Trim()}";
+            if (!seenRuleKeys.Add(ruleKey))
+            {
+                continue;
+            }
+
+            matchedTexts.Add(matchedText);
+        }
+
+        return matchedTexts;
     }
 
     private static IReadOnlyList<string> GetClipboardSegments(string currentText)

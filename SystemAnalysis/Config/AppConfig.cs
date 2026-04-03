@@ -111,10 +111,16 @@ public sealed class PointConfigEqualityComparer : IEqualityComparer<PointConfig>
 
 public sealed class ClipboardCheckConfig
 {
+    public const string SingleAlterationCraftMode = "single_alteration";
+    public const string FlaskAugmentCraftMode = "flask_augment";
+    public const string ItemAugmentCraftMode = "item_augment";
+
     public string TriggerShortcut { get; set; } = "ctrl+alt+c";
     public string MustContain { get; set; } = string.Empty;
     public bool CaseSensitive { get; set; }
+    public string CraftMode { get; set; } = SingleAlterationCraftMode;
     public bool UseAugmentCycle { get; set; }
+    public bool UseItemAugmentCycle { get; set; }
     public string PercentageThresholdText { get; set; } = string.Empty;
     public List<MatchRule> MatchRules { get; set; } = CreateDefaultRules();
     public List<MatchRule> AugmentMatchRules { get; set; } = CreateDefaultAugmentRules();
@@ -147,6 +153,25 @@ public sealed class ClipboardCheckConfig
 
     public void Normalize()
     {
+        if (string.IsNullOrWhiteSpace(CraftMode))
+        {
+            CraftMode = UseItemAugmentCycle
+                ? ItemAugmentCraftMode
+                : UseAugmentCycle
+                    ? FlaskAugmentCraftMode
+                    : SingleAlterationCraftMode;
+        }
+
+        if (!string.Equals(CraftMode, SingleAlterationCraftMode, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(CraftMode, FlaskAugmentCraftMode, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(CraftMode, ItemAugmentCraftMode, StringComparison.OrdinalIgnoreCase))
+        {
+            CraftMode = SingleAlterationCraftMode;
+        }
+
+        UseAugmentCycle = string.Equals(CraftMode, FlaskAugmentCraftMode, StringComparison.OrdinalIgnoreCase);
+        UseItemAugmentCycle = string.Equals(CraftMode, ItemAugmentCraftMode, StringComparison.OrdinalIgnoreCase);
+
         if (MatchRules is null || MatchRules.Count == 0)
         {
             MatchRules = CreateDefaultRules();
