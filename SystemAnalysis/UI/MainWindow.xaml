@@ -1,0 +1,265 @@
+<Window x:Class="SystemAnalysis.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SystemAnalysis"
+        Height="900"
+        Width="1100"
+        MinHeight="760"
+        MinWidth="980"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="260"/>
+        </Grid.RowDefinitions>
+
+        <TabControl x:Name="MainTabControl">
+            <TabItem Header="Craft Ayarlari 1">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <GroupBox Header="Craft Ayarlari" Margin="0,0,0,8">
+                        <StackPanel x:Name="MatchRulesPanel1" Margin="12"/>
+                    </GroupBox>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Craft Ayarlari 2">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <GroupBox Header="Craft Ayarlari 2" Margin="0,0,0,8">
+                        <StackPanel x:Name="MatchRulesPanel2" Margin="12"/>
+                    </GroupBox>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Craft Modlari">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <GroupBox Header="Craft Modlari" Margin="0,0,0,8">
+                        <Grid Margin="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Item Tur Limiti" VerticalAlignment="Center" Margin="0,0,12,12"/>
+                            <TextBox x:Name="MaxClicksPerItemRoundTextBox" Grid.Row="0" Grid.Column="1" Width="120" Margin="0,0,0,12" HorizontalAlignment="Left"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Alteration Nokta Limiti" VerticalAlignment="Center" Margin="0,0,12,12"/>
+                            <TextBox x:Name="MaxAlterationsPerSourcePointTextBox" Grid.Row="1" Grid.Column="1" Width="120" Margin="0,0,0,12" HorizontalAlignment="Left"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Craft Modu" VerticalAlignment="Center" Margin="0,0,12,12"/>
+                            <ComboBox x:Name="CraftModeComboBox" Grid.Row="2" Grid.Column="1" Margin="0,0,0,12" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Tamamlanan Item" VerticalAlignment="Center" Margin="0,0,12,12"/>
+                            <CheckBox x:Name="StashCompletedItemsCheckBox" Grid.Row="3" Grid.Column="1" Content="Tamamlanan itemi Ctrl ile stashe gonder" Margin="0,0,0,12"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Log Klasoru" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <TextBox x:Name="LogDirectoryTextBox" Grid.Row="4" Grid.Column="1" Margin="0,0,12,0"/>
+                            <Button x:Name="ChooseLogDirectoryButton" Grid.Row="4" Grid.Column="2" Content="Klasor Sec" Padding="12,4"/>
+                        </Grid>
+                    </GroupBox>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Augment">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <GroupBox Header="Augment Hedefleri" Margin="0,0,0,8">
+                        <StackPanel Margin="12">
+                            <TextBlock Text="Bu sekmedeki modlardan herhangi biri, alteration ile bulunan modun yanina geldiyse item tamam sayilir."
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,12"/>
+                            <StackPanel x:Name="AugmentRulesPanel"/>
+                        </StackPanel>
+                    </GroupBox>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Zamanlama">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <GroupBox Header="Zamanlama (ms)" Margin="0,0,0,8">
+                        <Grid Margin="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="180"/>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Baslamadan Once" VerticalAlignment="Center" Margin="0,0,12,12"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Min" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayBeforeStartMinTextBox" Grid.Row="0" Grid.Column="2" Margin="0,0,12,12" Width="100" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="0" Grid.Column="3" Text="Max" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayBeforeStartMaxTextBox" Grid.Row="0" Grid.Column="4" Margin="0,0,0,12" Width="100" HorizontalAlignment="Left"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Aksiyon Arasi" VerticalAlignment="Center" Margin="0,0,12,12"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="Min" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayBetweenActionsMinTextBox" Grid.Row="1" Grid.Column="2" Margin="0,0,12,12" Width="100" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="1" Grid.Column="3" Text="Max" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayBetweenActionsMaxTextBox" Grid.Row="1" Grid.Column="4" Margin="0,0,0,12" Width="100" HorizontalAlignment="Left"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Craft Sonrasi" VerticalAlignment="Center" Margin="0,0,12,12"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="Min" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayAfterCraftMinTextBox" Grid.Row="2" Grid.Column="2" Margin="0,0,12,12" Width="100" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="2" Grid.Column="3" Text="Max" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayAfterCraftMaxTextBox" Grid.Row="2" Grid.Column="4" Margin="0,0,0,12" Width="100" HorizontalAlignment="Left"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Shift+Alt" VerticalAlignment="Center" Margin="0,0,12,12"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="Min" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayShiftAltMinTextBox" Grid.Row="3" Grid.Column="2" Margin="0,0,12,12" Width="100" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="3" Grid.Column="3" Text="Max" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayShiftAltMaxTextBox" Grid.Row="3" Grid.Column="4" Margin="0,0,0,12" Width="100" HorizontalAlignment="Left"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Flask Basma Modu" VerticalAlignment="Center" Margin="0,0,12,12"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="Sabit" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayFlaskPressBaseTextBox" Grid.Row="4" Grid.Column="2" Margin="0,0,12,12" Width="100" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="4" Grid.Column="3" Text="Ek Min" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayFlaskPressExtraMinTextBox" Grid.Row="4" Grid.Column="4" Margin="0,0,0,12" Width="100" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="4" Grid.Column="5" Text="Ek Max" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayFlaskPressExtraMaxTextBox" Grid.Row="4" Grid.Column="6" Margin="0,0,0,12" Width="100" HorizontalAlignment="Left"/>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Inspect Oncesi" VerticalAlignment="Center" Margin="0,0,12,12"/>
+                            <TextBlock Grid.Row="5" Grid.Column="1" Text="Min" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayBeforeInspectMinTextBox" Grid.Row="5" Grid.Column="2" Margin="0,0,12,12" Width="100" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="5" Grid.Column="3" Text="Max" VerticalAlignment="Center" Margin="0,0,8,12"/>
+                            <TextBox x:Name="DelayBeforeInspectMaxTextBox" Grid.Row="5" Grid.Column="4" Margin="0,0,0,12" Width="100" HorizontalAlignment="Left"/>
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Kisayol Sonrasi" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <TextBlock Grid.Row="6" Grid.Column="1" Text="Min" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox x:Name="DelayAfterInspectShortcutMinTextBox" Grid.Row="6" Grid.Column="2" Margin="0,0,12,0" Width="100" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Row="6" Grid.Column="3" Text="Max" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox x:Name="DelayAfterInspectShortcutMaxTextBox" Grid.Row="6" Grid.Column="4" Margin="0,0,0,0" Width="100" HorizontalAlignment="Left"/>
+                        </Grid>
+                    </GroupBox>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Noktalar">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <GroupBox Header="Noktalar" Margin="0,0,0,8">
+                        <Grid Margin="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,12">
+                                <TextBlock Text="Alteration Noktalari" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <ListBox x:Name="AlterationPointsListBox" MinHeight="100"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Vertical" VerticalAlignment="Top">
+                                <Button x:Name="CaptureAlterationPointButton" Content="Alteration Ekle (F6)" Padding="12,6" Margin="0,0,0,8"/>
+                                <Button x:Name="RemoveAlterationPointButton" Content="Son Alterationu Sil" Padding="12,6" Margin="0,0,0,8"/>
+                                <Button x:Name="ResetCurrencyPointsButton" Content="Currencyleri Sifirla" Padding="12,6"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,12,12">
+                                <TextBlock Text="Augment Noktasi" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <TextBlock x:Name="AugmentPointTextBlock" />
+                            </StackPanel>
+                            <Button x:Name="CaptureAugmentPointButton" Grid.Row="1" Grid.Column="1" Content="Augment Kaydet (F10)" Padding="12,6" VerticalAlignment="Top"/>
+
+                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,12,12">
+                                <TextBlock x:Name="TargetCountTextBlock" Text="0 item noktasi secili" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <ListBox x:Name="TargetPointsListBox" MinHeight="140"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Vertical" VerticalAlignment="Top">
+                                <Button x:Name="CaptureTargetPointButton" Content="Item Ekle (F7)" Padding="12,6" Margin="0,0,0,8"/>
+                                <Button x:Name="RemoveTargetPointButton" Content="Son Itemi Sil" Padding="12,6" Margin="0,0,0,8"/>
+                                <Button x:Name="ClearTargetPointsButton" Content="Itemleri Temizle" Padding="12,6"/>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                                       Text="Item noktalari oturumluktur."
+                                       Margin="0,4,0,0"/>
+                        </Grid>
+                    </GroupBox>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Kayitli Modlar">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <GroupBox Header="Kayitli Modlar" Margin="0,0,0,8">
+                        <Grid Margin="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox x:Name="NewSavedModTextBox"
+                                     Grid.Row="0"
+                                     Grid.ColumnSpan="2"
+                                     Margin="0,0,0,12"
+                                     MinHeight="32"
+                                     VerticalContentAlignment="Center"/>
+
+                            <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,12">
+                                <Button x:Name="AddSavedModButton" Content="Ekle" Padding="16,6" Margin="0,0,8,0"/>
+                                <Button x:Name="RemoveSavedModButton" Content="Secileni Sil" Padding="16,6" Margin="0,0,8,0"/>
+                                <Button x:Name="ClearSavedModsButton" Content="Hepsini Temizle" Padding="16,6"/>
+                            </StackPanel>
+
+                            <ListBox x:Name="SavedModsListBox" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" MinHeight="300"/>
+                        </Grid>
+                    </GroupBox>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <DockPanel Grid.Row="1" Margin="0,10,0,10">
+            <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                <Button x:Name="StartButton" Content="Baslat (F8)" Padding="12,6" Margin="0,0,8,0"/>
+                <Button x:Name="StopButton" Content="Durdur (F9)" Padding="12,6" Margin="0,0,8,0" IsEnabled="False"/>
+                <Button x:Name="ClearButton" Content="Temizle" Padding="12,6" Margin="0,0,8,0"/>
+                <Button x:Name="CloseButton" Content="Kapat" Padding="12,6"/>
+            </StackPanel>
+
+            <CheckBox x:Name="ShowCopiedTextCheckBox"
+                      DockPanel.Dock="Right"
+                      Content="Kopyalanan metni logla"
+                      VerticalAlignment="Center"
+                      Margin="16,0,0,0"/>
+
+            <TextBlock Text="F6 alteration noktasi ekler. F10 augment noktasini kaydeder. F7 her basista yeni item noktasi ekler. Esc dahil fare veya klavye hareketi islemi durdurur."
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Center"
+                       Margin="16,0,0,0"/>
+        </DockPanel>
+
+        <GroupBox Grid.Row="2" Header="Log">
+            <TextBox x:Name="LogTextBox"
+                     Margin="12"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Disabled"/>
+        </GroupBox>
+    </Grid>
+</Window>

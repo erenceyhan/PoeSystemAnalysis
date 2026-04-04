@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json.Serialization;
 
 namespace SystemAnalysis.Config;
@@ -19,6 +20,7 @@ public sealed class AppConfig
     public TimingConfig Timing { get; set; } = new();
     public SafetyConfig Safety { get; set; } = new();
     public LoggingConfig Logging { get; set; } = new();
+    public bool StashCompletedItems { get; set; } = true;
 
     public void Normalize()
     {
@@ -114,6 +116,8 @@ public sealed class ClipboardCheckConfig
     public const string SingleAlterationCraftMode = "single_alteration";
     public const string FlaskAugmentCraftMode = "flask_augment";
     public const string ItemAugmentCraftMode = "item_augment";
+    public const string FractureClusterCraftMode = "fracture_cluster";
+    public const string FlaskPressCraftMode = "flask_press";
 
     public string TriggerShortcut { get; set; } = "ctrl+alt+c";
     public string MustContain { get; set; } = string.Empty;
@@ -164,7 +168,9 @@ public sealed class ClipboardCheckConfig
 
         if (!string.Equals(CraftMode, SingleAlterationCraftMode, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(CraftMode, FlaskAugmentCraftMode, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(CraftMode, ItemAugmentCraftMode, StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(CraftMode, ItemAugmentCraftMode, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(CraftMode, FractureClusterCraftMode, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(CraftMode, FlaskPressCraftMode, StringComparison.OrdinalIgnoreCase))
         {
             CraftMode = SingleAlterationCraftMode;
         }
@@ -251,22 +257,31 @@ public sealed class TimingConfig
     public DelayRange DelayBeforeStartMs { get; set; } = new(3000, 3000);
     public DelayRange DelayBetweenActionsMs { get; set; } = new(180, 180);
     public DelayRange DelayAfterCraftMs { get; set; } = new(220, 220);
+    public DelayRange DelayShiftAltMs { get; set; } = new(80, 120);
     public DelayRange DelayBeforeInspectMs { get; set; } = new(180, 180);
     public DelayRange DelayAfterInspectShortcutMs { get; set; } = new(200, 200);
+    public int DelayFlaskPressBaseMs { get; set; } = 3000;
+    public DelayRange DelayFlaskPressExtraMs { get; set; } = new(50, 250);
 
     public int? DelayBeforeStart { get; set; }
     public int? DelayBetweenActions { get; set; }
     public int? DelayAfterCraft { get; set; }
+    public int? DelayShiftAlt { get; set; }
     public int? DelayBeforeInspect { get; set; }
     public int? DelayAfterInspectShortcut { get; set; }
+    public int? DelayFlaskPressBase { get; set; }
 
     public void Normalize()
     {
         DelayBeforeStartMs = NormalizeRange(DelayBeforeStartMs, DelayBeforeStart, 3000);
         DelayBetweenActionsMs = NormalizeRange(DelayBetweenActionsMs, DelayBetweenActions, 180);
         DelayAfterCraftMs = NormalizeRange(DelayAfterCraftMs, DelayAfterCraft, 220);
+        DelayShiftAltMs = NormalizeRange(DelayShiftAltMs, DelayShiftAlt, 100);
         DelayBeforeInspectMs = NormalizeRange(DelayBeforeInspectMs, DelayBeforeInspect, 180);
         DelayAfterInspectShortcutMs = NormalizeRange(DelayAfterInspectShortcutMs, DelayAfterInspectShortcut, 200);
+        DelayFlaskPressBaseMs = Math.Max(0, DelayFlaskPressBase ?? DelayFlaskPressBaseMs);
+        DelayFlaskPressExtraMs ??= new DelayRange(50, 250);
+        DelayFlaskPressExtraMs.Normalize();
     }
 
     private static DelayRange NormalizeRange(DelayRange? range, int? legacyValue, int defaultValue)

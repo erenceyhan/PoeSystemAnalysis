@@ -5,6 +5,7 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>SystemAnalysis</AssemblyName>
     <RootNamespace>SystemAnalysis</RootNamespace>

@@ -2,6 +2,7 @@ using SystemAnalysis.Automation;
 using SystemAnalysis.Config;
 using SystemAnalysis.Interop;
 using System.Drawing;
+using System.IO;
 using System.Media;
 using System.Reflection;
 using System.Text;
@@ -28,6 +29,7 @@ public sealed class MainForm : Form
     private readonly List<TextBox> _augmentRuleThresholdTextBoxes = new();
     private readonly ComboBox _modeComboBox;
     private readonly ComboBox _craftModeComboBox;
+    private readonly CheckBox _stashCompletedItemsCheckBox;
     private readonly NumericUpDown _maxClicksPerItemRoundInput;
     private readonly NumericUpDown _maxAlterationsPerSourcePointInput;
     private readonly Label _augmentPointLabel;
@@ -42,6 +44,11 @@ public sealed class MainForm : Form
     private readonly NumericUpDown _delayBetweenActionsMaxInput;
     private readonly NumericUpDown _delayAfterCraftMinInput;
     private readonly NumericUpDown _delayAfterCraftMaxInput;
+    private readonly NumericUpDown _delayShiftAltMinInput;
+    private readonly NumericUpDown _delayShiftAltMaxInput;
+    private readonly NumericUpDown _delayFlaskPressBaseInput;
+    private readonly NumericUpDown _delayFlaskPressExtraMinInput;
+    private readonly NumericUpDown _delayFlaskPressExtraMaxInput;
     private readonly NumericUpDown _delayBeforeInspectMinInput;
     private readonly NumericUpDown _delayBeforeInspectMaxInput;
     private readonly NumericUpDown _delayAfterInspectShortcutMinInput;
@@ -52,6 +59,8 @@ public sealed class MainForm : Form
     private readonly Button _stopButton;
     private readonly TextBox _logTextBox;
     private bool _isRefreshingUi;
+    private string _runningCraftMode = ClipboardCheckConfig.SingleAlterationCraftMode;
+    private bool _suppressRunLogging;
 
     public MainForm(string configPath, AppConfig config)
     {
@@ -93,6 +102,21 @@ public sealed class MainForm : Form
         panel1Container.SuspendLayout();
         EnableDoubleBuffering(panel1Container);
 
+        var panel1Layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            Margin = new Padding(0),
+            Padding = new Padding(0)
+        };
+        panel1Layout.SuspendLayout();
+        panel1Layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        panel1Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel1Layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        panel1Layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        EnableDoubleBuffering(panel1Layout);
+
         var sectionBar = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -113,6 +137,7 @@ public sealed class MainForm : Form
 
         var settingsTab = CreateSectionPanel();
         var settingsTabTwo = CreateSectionPanel();
+        var craftModesTab = CreateSectionPanel();
         var augmentTab = CreateSectionPanel();
         var timingTab = CreateSectionPanel();
         var pointsTab = CreateSectionPanel();
@@ -133,10 +158,11 @@ public sealed class MainForm : Form
             ColumnCount = 2,
             AutoSize = true,
             GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
-            RowCount = 12
+            RowCount = 7
         };
         settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        ConfigureFixedRows(settingsGrid, 7, 38);
 
         AddMatchRuleRows(settingsGrid, 0, 7);
 
@@ -149,64 +175,8 @@ public sealed class MainForm : Form
         _modeComboBox.Items.Add(new ModeOption("hold_shift_spam", "Shift Basili Tekrarli Tiklama"));
         SelectMode();
 
-        settingsGrid.Controls.Add(new Label { Text = "Item Tur Limiti", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 7);
-        _maxClicksPerItemRoundInput = new NumericUpDown
-        {
-            Minimum = 1,
-            Maximum = 10000,
-            Increment = 10,
-            Value = Math.Max(1, Math.Min(_config.MaxClicksPerItemRound, 10000)),
-            Width = 100
-        };
-        _maxClicksPerItemRoundInput.ValueChanged += (_, _) => SaveUiToConfig();
-        settingsGrid.Controls.Add(_maxClicksPerItemRoundInput, 1, 7);
-
-        settingsGrid.Controls.Add(new Label { Text = "Alteration Nokta Limiti", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 8);
-        _maxAlterationsPerSourcePointInput = new NumericUpDown
-        {
-            Minimum = 1,
-            Maximum = 50000,
-            Increment = 100,
-            Value = Math.Max(1, Math.Min(_config.MaxAlterationsPerSourcePoint, 50000)),
-            Width = 100
-        };
-        _maxAlterationsPerSourcePointInput.ValueChanged += (_, _) => SaveUiToConfig();
-        settingsGrid.Controls.Add(_maxAlterationsPerSourcePointInput, 1, 8);
-
-        settingsGrid.Controls.Add(new Label { Text = "Craft Modu", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 9);
-        _craftModeComboBox = new ComboBox
-        {
-            Dock = DockStyle.Top,
-            DropDownStyle = ComboBoxStyle.DropDownList
-        };
-        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.SingleAlterationCraftMode, "1 Mod Alteration"));
-        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.FlaskAugmentCraftMode, "Flask Modu"));
-        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.ItemAugmentCraftMode, "2 Mod Alteration + Augment"));
-        SelectCraftMode();
-        _craftModeComboBox.SelectedIndexChanged += (_, _) => SaveUiToConfig();
-        settingsGrid.Controls.Add(_craftModeComboBox, 1, 9);
-
-        settingsGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 10);
-        var logPathPanel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 2,
-            AutoSize = true
-        };
-        logPathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        logPathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        logPathPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        logPathPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _logDirectoryTextBox = new TextBox { Dock = DockStyle.Top, Text = _config.Logging.DirectoryPath };
-        logPathPanel.Controls.Add(_logDirectoryTextBox, 0, 0);
-        var chooseLogFolderButton = new Button { Text = "Klasor Sec", AutoSize = true };
-        chooseLogFolderButton.Click += (_, _) => ChooseLogDirectory();
-        logPathPanel.Controls.Add(chooseLogFolderButton, 1, 0);
-        settingsGrid.Controls.Add(logPathPanel, 1, 10);
-
         settingsGroup.Controls.Add(settingsGrid);
-        FreezeSectionLayout(settingsGroup, settingsGrid, 520);
+        FreezeSectionLayout(settingsGroup, settingsGrid, 400);
 
         var settingsGroupTwo = new GroupBox
         {
@@ -227,9 +197,100 @@ public sealed class MainForm : Form
         };
         settingsGridTwo.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         settingsGridTwo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        ConfigureFixedRows(settingsGridTwo, 8, 38);
         AddMatchRuleRows(settingsGridTwo, 7, 8);
         settingsGroupTwo.Controls.Add(settingsGridTwo);
         FreezeSectionLayout(settingsGroupTwo, settingsGridTwo, 420);
+
+        var craftModesGroup = new GroupBox
+        {
+            Dock = DockStyle.Top,
+            Text = "Craft Modlari",
+            AutoSize = true,
+            Width = 970
+        };
+
+        var craftModesGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 2,
+            AutoSize = true,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
+            RowCount = 5
+        };
+        craftModesGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
+        craftModesGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        ConfigureFixedRows(craftModesGrid, 5, 42);
+
+        craftModesGrid.Controls.Add(new Label { Text = "Item Tur Limiti", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 0);
+        _maxClicksPerItemRoundInput = new NumericUpDown
+        {
+            Minimum = 1,
+            Maximum = 10000,
+            Increment = 10,
+            Value = Math.Max(1, Math.Min(_config.MaxClicksPerItemRound, 10000)),
+            Width = 100
+        };
+        _maxClicksPerItemRoundInput.ValueChanged += (_, _) => SaveUiToConfig();
+        craftModesGrid.Controls.Add(_maxClicksPerItemRoundInput, 1, 0);
+
+        craftModesGrid.Controls.Add(new Label { Text = "Alteration Nokta Limiti", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 1);
+        _maxAlterationsPerSourcePointInput = new NumericUpDown
+        {
+            Minimum = 1,
+            Maximum = 50000,
+            Increment = 100,
+            Value = Math.Max(1, Math.Min(_config.MaxAlterationsPerSourcePoint, 50000)),
+            Width = 100
+        };
+        _maxAlterationsPerSourcePointInput.ValueChanged += (_, _) => SaveUiToConfig();
+        craftModesGrid.Controls.Add(_maxAlterationsPerSourcePointInput, 1, 1);
+
+        craftModesGrid.Controls.Add(new Label { Text = "Craft Modu", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 2);
+        _craftModeComboBox = new ComboBox
+        {
+            Dock = DockStyle.Top,
+            DropDownStyle = ComboBoxStyle.DropDownList
+        };
+        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.SingleAlterationCraftMode, "1 Mod Alteration"));
+        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.FlaskAugmentCraftMode, "Flask Modu"));
+        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.ItemAugmentCraftMode, "2 Mod Alteration + Augment"));
+        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.FractureClusterCraftMode, "Fracture Cluster"));
+        _craftModeComboBox.Items.Add(new CraftModeOption(ClipboardCheckConfig.FlaskPressCraftMode, "Flask Basma Modu"));
+        SelectCraftMode();
+        _craftModeComboBox.SelectedIndexChanged += (_, _) => SaveUiToConfig();
+        craftModesGrid.Controls.Add(_craftModeComboBox, 1, 2);
+
+        craftModesGrid.Controls.Add(new Label { Text = "Tamamlanan Item", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 3);
+        _stashCompletedItemsCheckBox = new CheckBox
+        {
+            AutoSize = true,
+            Checked = _config.StashCompletedItems,
+            Text = "Tamamlanan itemi Ctrl ile stashe gonder"
+        };
+        _stashCompletedItemsCheckBox.CheckedChanged += (_, _) => SaveUiToConfig();
+        craftModesGrid.Controls.Add(_stashCompletedItemsCheckBox, 1, 3);
+
+        craftModesGrid.Controls.Add(new Label { Text = "Log Klasoru", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 4);
+        var logPathPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            AutoSize = true
+        };
+        logPathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        logPathPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        _logDirectoryTextBox = new TextBox { Dock = DockStyle.Top, Text = _config.Logging.DirectoryPath };
+        logPathPanel.Controls.Add(_logDirectoryTextBox, 0, 0);
+        var chooseLogFolderButton = new Button { Text = "Klasor Sec", AutoSize = true };
+        chooseLogFolderButton.Click += (_, _) => ChooseLogDirectory();
+        logPathPanel.Controls.Add(chooseLogFolderButton, 1, 0);
+        craftModesGrid.Controls.Add(logPathPanel, 1, 4);
+
+        craftModesGroup.Controls.Add(craftModesGrid);
+        FreezeSectionLayout(craftModesGroup, craftModesGrid, 290);
 
         var augmentGroup = new GroupBox
         {
@@ -250,6 +311,7 @@ public sealed class MainForm : Form
         };
         augmentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
         augmentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        ConfigureAugmentRows(augmentGrid);
 
         augmentGrid.Controls.Add(new Label
         {
@@ -277,66 +339,100 @@ public sealed class MainForm : Form
             ColumnCount = 5,
             AutoSize = true,
             GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
-            RowCount = 5
+            RowCount = 7
         };
         timingGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
         timingGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
         timingGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
         timingGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
         timingGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
+        ConfigureFixedRows(timingGrid, 7, 40);
 
-        timingGrid.Controls.Add(new Label { Text = "Baslamadan Once", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
-        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left }, 1, 0);
+        timingGrid.Controls.Add(new Label { Text = "Baslamadan Once", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 0);
+        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 1, 0);
         _delayBeforeStartMinInput = CreateTimingInput(_config.Timing.DelayBeforeStartMs.Min);
         _delayBeforeStartMinInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayBeforeStartMinInput, 2, 0);
-        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left }, 3, 0);
+        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 3, 0);
         _delayBeforeStartMaxInput = CreateTimingInput(_config.Timing.DelayBeforeStartMs.Max);
         _delayBeforeStartMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayBeforeStartMaxInput, 4, 0);
 
-        timingGrid.Controls.Add(new Label { Text = "Aksiyon Arasi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 1);
-        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left }, 1, 1);
+        timingGrid.Controls.Add(new Label { Text = "Aksiyon Arasi", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 1);
+        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 1, 1);
         _delayBetweenActionsMinInput = CreateTimingInput(_config.Timing.DelayBetweenActionsMs.Min);
         _delayBetweenActionsMinInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayBetweenActionsMinInput, 2, 1);
-        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left }, 3, 1);
+        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 3, 1);
         _delayBetweenActionsMaxInput = CreateTimingInput(_config.Timing.DelayBetweenActionsMs.Max);
         _delayBetweenActionsMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayBetweenActionsMaxInput, 4, 1);
 
-        timingGrid.Controls.Add(new Label { Text = "Craft Sonrasi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 2);
-        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left }, 1, 2);
+        timingGrid.Controls.Add(new Label { Text = "Craft Sonrasi", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 2);
+        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 1, 2);
         _delayAfterCraftMinInput = CreateTimingInput(_config.Timing.DelayAfterCraftMs.Min);
         _delayAfterCraftMinInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayAfterCraftMinInput, 2, 2);
-        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left }, 3, 2);
+        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 3, 2);
         _delayAfterCraftMaxInput = CreateTimingInput(_config.Timing.DelayAfterCraftMs.Max);
         _delayAfterCraftMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
         timingGrid.Controls.Add(_delayAfterCraftMaxInput, 4, 2);
 
-        timingGrid.Controls.Add(new Label { Text = "Inspect Oncesi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 3);
-        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left }, 1, 3);
+        timingGrid.Controls.Add(new Label { Text = "Shift+Alt", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 3);
+        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 1, 3);
+        _delayShiftAltMinInput = CreateTimingInput(_config.Timing.DelayShiftAltMs.Min);
+        _delayShiftAltMinInput.ValueChanged += (_, _) => SaveUiToConfig();
+        timingGrid.Controls.Add(_delayShiftAltMinInput, 2, 3);
+        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 3, 3);
+        _delayShiftAltMaxInput = CreateTimingInput(_config.Timing.DelayShiftAltMs.Max);
+        _delayShiftAltMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
+        timingGrid.Controls.Add(_delayShiftAltMaxInput, 4, 3);
+
+        timingGrid.Controls.Add(new Label { Text = "Flask Basma Modu", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 4);
+        var flaskPressTimingPanel = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = false,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = new Padding(0)
+        };
+        flaskPressTimingPanel.Controls.Add(new Label { Text = "Sabit", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 8, 0) });
+        _delayFlaskPressBaseInput = CreateTimingInput(_config.Timing.DelayFlaskPressBaseMs);
+        _delayFlaskPressBaseInput.ValueChanged += (_, _) => SaveUiToConfig();
+        flaskPressTimingPanel.Controls.Add(_delayFlaskPressBaseInput);
+        flaskPressTimingPanel.Controls.Add(new Label { Text = "Ek Min", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(16, 6, 8, 0) });
+        _delayFlaskPressExtraMinInput = CreateTimingInput(_config.Timing.DelayFlaskPressExtraMs.Min);
+        _delayFlaskPressExtraMinInput.ValueChanged += (_, _) => SaveUiToConfig();
+        flaskPressTimingPanel.Controls.Add(_delayFlaskPressExtraMinInput);
+        flaskPressTimingPanel.Controls.Add(new Label { Text = "Ek Max", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(16, 6, 8, 0) });
+        _delayFlaskPressExtraMaxInput = CreateTimingInput(_config.Timing.DelayFlaskPressExtraMs.Max);
+        _delayFlaskPressExtraMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
+        flaskPressTimingPanel.Controls.Add(_delayFlaskPressExtraMaxInput);
+        timingGrid.Controls.Add(flaskPressTimingPanel, 1, 4);
+        timingGrid.SetColumnSpan(flaskPressTimingPanel, 4);
+
+        timingGrid.Controls.Add(new Label { Text = "Inspect Oncesi", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 5);
+        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 1, 5);
         _delayBeforeInspectMinInput = CreateTimingInput(_config.Timing.DelayBeforeInspectMs.Min);
         _delayBeforeInspectMinInput.ValueChanged += (_, _) => SaveUiToConfig();
-        timingGrid.Controls.Add(_delayBeforeInspectMinInput, 2, 3);
-        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left }, 3, 3);
+        timingGrid.Controls.Add(_delayBeforeInspectMinInput, 2, 5);
+        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 3, 5);
         _delayBeforeInspectMaxInput = CreateTimingInput(_config.Timing.DelayBeforeInspectMs.Max);
         _delayBeforeInspectMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
-        timingGrid.Controls.Add(_delayBeforeInspectMaxInput, 4, 3);
+        timingGrid.Controls.Add(_delayBeforeInspectMaxInput, 4, 5);
 
-        timingGrid.Controls.Add(new Label { Text = "Kisayol Sonrasi", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 4);
-        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left }, 1, 4);
+        timingGrid.Controls.Add(new Label { Text = "Kisayol Sonrasi", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 0, 6);
+        timingGrid.Controls.Add(new Label { Text = "Min", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 1, 6);
         _delayAfterInspectShortcutMinInput = CreateTimingInput(_config.Timing.DelayAfterInspectShortcutMs.Min);
         _delayAfterInspectShortcutMinInput.ValueChanged += (_, _) => SaveUiToConfig();
-        timingGrid.Controls.Add(_delayAfterInspectShortcutMinInput, 2, 4);
-        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left }, 3, 4);
+        timingGrid.Controls.Add(_delayAfterInspectShortcutMinInput, 2, 6);
+        timingGrid.Controls.Add(new Label { Text = "Max", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top }, 3, 6);
         _delayAfterInspectShortcutMaxInput = CreateTimingInput(_config.Timing.DelayAfterInspectShortcutMs.Max);
         _delayAfterInspectShortcutMaxInput.ValueChanged += (_, _) => SaveUiToConfig();
-        timingGrid.Controls.Add(_delayAfterInspectShortcutMaxInput, 4, 4);
+        timingGrid.Controls.Add(_delayAfterInspectShortcutMaxInput, 4, 6);
 
         timingGroup.Controls.Add(timingGrid);
-        FreezeSectionLayout(timingGroup, timingGrid, 280);
+        FreezeSectionLayout(timingGroup, timingGrid, 370);
 
         var pointsGroup = new GroupBox
         {
@@ -583,6 +679,7 @@ public sealed class MainForm : Form
 
         settingsTab.Controls.Add(settingsGroup);
         settingsTabTwo.Controls.Add(settingsGroupTwo);
+        craftModesTab.Controls.Add(craftModesGroup);
         augmentTab.Controls.Add(augmentGroup);
         timingTab.Controls.Add(timingGroup);
         pointsTab.Controls.Add(pointsGroup);
@@ -592,6 +689,7 @@ public sealed class MainForm : Form
         {
             ("Craft Ayarlari 1", settingsTab),
             ("Craft Ayarlari 2", settingsTabTwo),
+            ("Craft Modlari", craftModesTab),
             ("Augment", augmentTab),
             ("Zamanlama", timingTab),
             ("Noktalar", pointsTab),
@@ -641,9 +739,10 @@ public sealed class MainForm : Form
             }
         }
 
-        panel1Container.Controls.Add(contentHost);
-        panel1Container.Controls.Add(sectionBar);
-        panel1Container.Controls.Add(actionsPanel);
+        panel1Layout.Controls.Add(sectionBar, 0, 0);
+        panel1Layout.Controls.Add(contentHost, 0, 1);
+        panel1Layout.Controls.Add(actionsPanel, 0, 2);
+        panel1Container.Controls.Add(panel1Layout);
 
         splitContainer.Panel1.Controls.Add(panel1Container);
         splitContainer.Panel2.Padding = new Padding(12, 0, 12, 12);
@@ -654,6 +753,8 @@ public sealed class MainForm : Form
         contentHost.ResumeLayout(false);
         sectionBar.ResumeLayout(false);
         sectionBar.PerformLayout();
+        panel1Layout.ResumeLayout(false);
+        panel1Layout.PerformLayout();
         panel1Container.ResumeLayout(false);
         splitContainer.Panel2.ResumeLayout(false);
         splitContainer.Panel1.ResumeLayout(false);
@@ -698,11 +799,32 @@ public sealed class MainForm : Form
 
     private void HookMonitorEvents()
     {
-        _monitor.StartRequested += () => InvokeOnUi(StartRun);
-        _monitor.StopRequested += () => InvokeOnUi(() => StopCurrentRun("Durdurma istendi."));
+        _monitor.StartRequested += () => InvokeOnUi(HandleStartRequested);
+        _monitor.StopRequested += () => InvokeOnUi(HandleStopRequested);
         _monitor.CaptureSourceRequested += () => InvokeOnUi(() => CapturePoint(PointKind.Source));
         _monitor.CaptureSecondarySourceRequested += () => InvokeOnUi(() => CapturePoint(PointKind.SecondarySource));
         _monitor.CaptureTargetRequested += () => InvokeOnUi(() => CapturePoint(PointKind.Target));
+    }
+
+    private void HandleStartRequested()
+    {
+        if (IsCurrentRunFlaskPressMode())
+        {
+            StopCurrentRun("Flask basma modu durduruldu.");
+            return;
+        }
+
+        StartRun();
+    }
+
+    private void HandleStopRequested()
+    {
+        if (IsCurrentRunFlaskPressMode())
+        {
+            return;
+        }
+
+        StopCurrentRun("Durdurma istendi.");
     }
 
     private void StartRun()
@@ -711,119 +833,159 @@ public sealed class MainForm : Form
         {
             if (_currentRun is { IsCompleted: false })
             {
+                if (IsCurrentRunFlaskPressMode())
+                {
+                    StopCurrentRun("Flask basma modu durduruldu.");
+                    return;
+                }
+
                 AppendLog("Islem zaten calisiyor.");
                 return;
             }
 
             SaveUiToConfig();
 
-            if (_config.TargetPoints.Count == 0)
-            {
-                SystemSounds.Exclamation.Play();
-                AppendLog("En az bir item noktasi eklemeden baslatamazsin.");
-                return;
-            }
-
-            if (_config.AlterationPoints.Count == 0)
-            {
-                SystemSounds.Exclamation.Play();
-                AppendLog("Once en az bir alteration noktasi kaydetmelisin.");
-                return;
-            }
-
             var selectedCraftMode = GetSelectedCraftMode();
-            var useFlaskAugmentCycle = string.Equals(selectedCraftMode, ClipboardCheckConfig.FlaskAugmentCraftMode, StringComparison.OrdinalIgnoreCase);
-            var useItemAugmentCycle = string.Equals(selectedCraftMode, ClipboardCheckConfig.ItemAugmentCraftMode, StringComparison.OrdinalIgnoreCase);
+            var useFlaskPressMode = string.Equals(selectedCraftMode, ClipboardCheckConfig.FlaskPressCraftMode, StringComparison.OrdinalIgnoreCase);
 
-            if ((useFlaskAugmentCycle || useItemAugmentCycle) && IsUnset(_config.SecondarySourcePoint))
+            if (!useFlaskPressMode)
             {
-                SystemSounds.Exclamation.Play();
-                AppendLog("Augment akisi aciksa once augment noktasini kaydetmelisin.");
-                return;
-            }
-
-            if ((useFlaskAugmentCycle || useItemAugmentCycle) && !_config.ClipboardCheck.GetActiveAugmentRules().Any())
-            {
-                SystemSounds.Exclamation.Play();
-                AppendLog("Augment akisi aciksa augment sekmesinden en az bir mod secmelisin.");
-                return;
-            }
-
-            if (useItemAugmentCycle && !_config.ClipboardCheck.GetActiveRules().Any())
-            {
-                SystemSounds.Exclamation.Play();
-                AppendLog("Item augment akisi aciksa craft ayarlarindan en az bir mod secmelisin.");
-                return;
-            }
-
-            if (useItemAugmentCycle)
-            {
-                var distinctSelectedMods = _config.ClipboardCheck.GetActiveRules()
-                    .Concat(_config.ClipboardCheck.GetActiveAugmentRules())
-                    .Select(rule => $"{rule.Text.Trim()}|{rule.ThresholdText.Trim()}")
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Count();
-
-                if (distinctSelectedMods < 2)
+                if (_config.TargetPoints.Count == 0)
                 {
                     SystemSounds.Exclamation.Play();
-                    AppendLog("2 Mod Alteration + Augment icin toplamda en az iki farkli hedef mod secmelisin.");
+                    AppendLog("En az bir item noktasi eklemeden baslatamazsin.");
+                    return;
+                }
+
+                if (_config.AlterationPoints.Count == 0)
+                {
+                    SystemSounds.Exclamation.Play();
+                    AppendLog("Once en az bir alteration noktasi kaydetmelisin.");
+                    return;
+                }
+
+                var useFlaskAugmentCycle = string.Equals(selectedCraftMode, ClipboardCheckConfig.FlaskAugmentCraftMode, StringComparison.OrdinalIgnoreCase);
+                var useItemAugmentCycle = string.Equals(selectedCraftMode, ClipboardCheckConfig.ItemAugmentCraftMode, StringComparison.OrdinalIgnoreCase);
+
+                if ((useFlaskAugmentCycle || useItemAugmentCycle) && IsUnset(_config.SecondarySourcePoint))
+                {
+                    SystemSounds.Exclamation.Play();
+                    AppendLog("Augment akisi aciksa once augment noktasini kaydetmelisin.");
+                    return;
+                }
+
+                if ((useFlaskAugmentCycle || useItemAugmentCycle) && !_config.ClipboardCheck.GetActiveAugmentRules().Any())
+                {
+                    SystemSounds.Exclamation.Play();
+                    AppendLog("Augment akisi aciksa augment sekmesinden en az bir mod secmelisin.");
+                    return;
+                }
+
+                if (useItemAugmentCycle && !_config.ClipboardCheck.GetActiveRules().Any())
+                {
+                    SystemSounds.Exclamation.Play();
+                    AppendLog("Item augment akisi aciksa craft ayarlarindan en az bir mod secmelisin.");
+                    return;
+                }
+
+                if (useItemAugmentCycle)
+                {
+                    var distinctSelectedMods = _config.ClipboardCheck.GetActiveRules()
+                        .Concat(_config.ClipboardCheck.GetActiveAugmentRules())
+                        .Select(rule => $"{rule.Text.Trim()}|{rule.ThresholdText.Trim()}")
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Count();
+
+                    if (distinctSelectedMods < 2)
+                    {
+                        SystemSounds.Exclamation.Play();
+                        AppendLog("2 Mod Alteration + Augment icin toplamda en az iki farkli hedef mod secmelisin.");
+                        return;
+                    }
+                }
+
+                if (HasThresholdRuleWithoutValue())
+                {
+                    SystemSounds.Exclamation.Play();
+                    AppendLog("Secili modlardan birinde '#' kullaniliyor. O modun yanindaki esik kutusunu doldurmalisin.");
                     return;
                 }
             }
 
-            if (HasThresholdRuleWithoutValue())
-            {
-                SystemSounds.Exclamation.Play();
-                AppendLog("Secili modlardan birinde '#' kullaniliyor. O modun yanindaki esik kutusunu doldurmalisin.");
-                return;
-            }
-
-            var useAugmentCycle = useFlaskAugmentCycle
+            var useFlaskAugmentCycleFinal = string.Equals(selectedCraftMode, ClipboardCheckConfig.FlaskAugmentCraftMode, StringComparison.OrdinalIgnoreCase);
+            var useItemAugmentCycleFinal = string.Equals(selectedCraftMode, ClipboardCheckConfig.ItemAugmentCraftMode, StringComparison.OrdinalIgnoreCase);
+            var useFractureClusterCycle = string.Equals(selectedCraftMode, ClipboardCheckConfig.FractureClusterCraftMode, StringComparison.OrdinalIgnoreCase);
+            var useAugmentCycle = useFlaskAugmentCycleFinal
                                   && !IsUnset(_config.SecondarySourcePoint)
                                   && _config.ClipboardCheck.GetActiveAugmentRules().Any();
-            var useItemAugment = useItemAugmentCycle
+            var useItemAugment = useItemAugmentCycleFinal
                                  && !IsUnset(_config.SecondarySourcePoint)
                                  && _config.ClipboardCheck.GetActiveAugmentRules().Any()
                                  && _config.ClipboardCheck.GetActiveRules().Any();
-            _config.ClipboardCheck.CraftMode = useItemAugment
-                ? ClipboardCheckConfig.ItemAugmentCraftMode
-                : useAugmentCycle
-                    ? ClipboardCheckConfig.FlaskAugmentCraftMode
-                    : ClipboardCheckConfig.SingleAlterationCraftMode;
+            _config.ClipboardCheck.CraftMode = selectedCraftMode;
             _config.ClipboardCheck.Normalize();
 
             _runCancellation = new CancellationTokenSource();
-            PrepareRunLogFile();
-            _monitor.IsArmed = true;
+            _runningCraftMode = selectedCraftMode;
+            _suppressRunLogging = useFlaskPressMode;
+            _currentLogFilePath = null;
+            if (!useFlaskPressMode)
+            {
+                PrepareRunLogFile();
+            }
+
+            _monitor.IsArmed = !useFlaskPressMode;
             SetRunningState(true);
-            var flowText = useItemAugment
-                ? "Item icin Mod + Augment"
-                : useAugmentCycle
-                    ? "Alteration + Augment"
-                    : "Sadece Alteration";
-            AppendLog($"Baslatma istendi. Calisacak akis: {flowText}");
-            ShowRunStatusOverlay();
-            UpdateRunStatusOverlay(new RunProgress(0, 0, 0));
+            if (!useFlaskPressMode)
+            {
+                var flowText = useItemAugment
+                    ? "Item icin Mod + Augment"
+                    : useAugmentCycle
+                        ? "Alteration + Augment"
+                        : useFractureClusterCycle
+                            ? "Fracture Cluster"
+                            : "Sadece Alteration";
+                AppendLog($"Baslatma istendi. Calisacak akis: {flowText}");
+                ShowRunStatusOverlay();
+                UpdateRunStatusOverlay(new RunProgress(0, 0, 0));
+            }
+            else
+            {
+                HideRunStatusOverlay();
+            }
 
             _currentRun = Task.Run(async () =>
             {
                 try
                 {
-                    var runner = new AnalysisRunner(
-                        _config,
-                        AppendLogThreadSafe,
-                        point => InvokeOnUi(() => RemoveCompletedTargetPoint(point)),
-                        progress => InvokeOnUi(() => UpdateRunStatusOverlay(progress)));
-                    await runner.RunAsync(_runCancellation.Token);
+                    if (useFlaskPressMode)
+                    {
+                        var flaskRunner = new FlaskPressRunner(_config);
+                        await flaskRunner.RunAsync(_runCancellation.Token);
+                    }
+                    else
+                    {
+                        var runner = new AnalysisRunner(
+                            _config,
+                            AppendLogThreadSafe,
+                            point => InvokeOnUi(() => RemoveCompletedTargetPoint(point)),
+                            progress => InvokeOnUi(() => UpdateRunStatusOverlay(progress)));
+                        await runner.RunAsync(_runCancellation.Token);
+                    }
                 }
                 catch (OperationCanceledException)
                 {
-                    AppendLogThreadSafe("Islem guvenli sekilde durduruldu.");
+                    if (!_suppressRunLogging)
+                    {
+                        AppendLogThreadSafe("Islem guvenli sekilde durduruldu.");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    AppendLogThreadSafe($"Hata: {ex.Message}");
+                    if (!_suppressRunLogging)
+                    {
+                        AppendLogThreadSafe($"Hata: {ex.Message}");
+                    }
                 }
                 finally
                 {
@@ -832,6 +994,7 @@ public sealed class MainForm : Form
                         _monitor.IsArmed = false;
                         _runCancellation?.Dispose();
                         _runCancellation = null;
+                        _runningCraftMode = ClipboardCheckConfig.SingleAlterationCraftMode;
                     }
 
                     InvokeOnUi(() =>
@@ -839,6 +1002,8 @@ public sealed class MainForm : Form
                         SetRunningState(false);
                         HideRunStatusOverlay();
                     });
+
+                    _suppressRunLogging = false;
                 }
             });
         }
@@ -885,6 +1050,7 @@ public sealed class MainForm : Form
         _config.ClipboardCheck.Normalize();
         _config.MaxClicksPerItemRound = Decimal.ToInt32(_maxClicksPerItemRoundInput.Value);
         _config.MaxAlterationsPerSourcePoint = Decimal.ToInt32(_maxAlterationsPerSourcePointInput.Value);
+        _config.StashCompletedItems = _stashCompletedItemsCheckBox.Checked;
 
         var firstActiveRule = _config.ClipboardCheck.GetActiveRules().FirstOrDefault();
         _config.ClipboardCheck.MustContain = firstActiveRule?.Text ?? string.Empty;
@@ -897,6 +1063,9 @@ public sealed class MainForm : Form
         _config.Timing.DelayBeforeStartMs = CreateRange(_delayBeforeStartMinInput, _delayBeforeStartMaxInput);
         _config.Timing.DelayBetweenActionsMs = CreateRange(_delayBetweenActionsMinInput, _delayBetweenActionsMaxInput);
         _config.Timing.DelayAfterCraftMs = CreateRange(_delayAfterCraftMinInput, _delayAfterCraftMaxInput);
+        _config.Timing.DelayShiftAltMs = CreateRange(_delayShiftAltMinInput, _delayShiftAltMaxInput);
+        _config.Timing.DelayFlaskPressBaseMs = Decimal.ToInt32(_delayFlaskPressBaseInput.Value);
+        _config.Timing.DelayFlaskPressExtraMs = CreateRange(_delayFlaskPressExtraMinInput, _delayFlaskPressExtraMaxInput);
         _config.Timing.DelayBeforeInspectMs = CreateRange(_delayBeforeInspectMinInput, _delayBeforeInspectMaxInput);
         _config.Timing.DelayAfterInspectShortcutMs = CreateRange(_delayAfterInspectShortcutMinInput, _delayAfterInspectShortcutMaxInput);
         _config.Logging.DirectoryPath = _logDirectoryTextBox.Text.Trim();
@@ -1264,6 +1433,11 @@ public sealed class MainForm : Form
 
     private void AppendLog(string message)
     {
+        if (_suppressRunLogging)
+        {
+            return;
+        }
+
         var line = $"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}";
         _logTextBox.AppendText(line);
         WriteLogToFile(line);
@@ -1311,6 +1485,7 @@ public sealed class MainForm : Form
             .AppendLine($"Alteration Nokta Limiti: {_config.MaxAlterationsPerSourcePoint}")
             .AppendLine($"Alteration Noktalari: {(_config.AlterationPoints.Count == 0 ? "Secili alteration noktasi yok" : string.Join(" | ", _config.AlterationPoints.Select((point, index) => $"{index + 1}. {FormatPoint(point)}")))}")
             .AppendLine($"Craft Modu: {GetAugmentFlowDescription()}")
+            .AppendLine($"Tamamlanan Item Stashe Gonder: {(_config.StashCompletedItems ? "Acik" : "Kapali")}")
             .AppendLine($"Augment Noktasi: {FormatPoint(_config.SecondarySourcePoint)}")
             .AppendLine($"Item Noktalari: {targetPointsText}")
             .AppendLine(new string('-', 48))
@@ -1334,9 +1509,19 @@ public sealed class MainForm : Form
 
     private string GetAugmentFlowDescription()
     {
+        if (string.Equals(_config.ClipboardCheck.CraftMode, ClipboardCheckConfig.FlaskPressCraftMode, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Flask Basma Modu";
+        }
+
         if (string.Equals(_config.ClipboardCheck.CraftMode, ClipboardCheckConfig.ItemAugmentCraftMode, StringComparison.OrdinalIgnoreCase))
         {
             return "2 Mod Alteration + Augment";
+        }
+
+        if (string.Equals(_config.ClipboardCheck.CraftMode, ClipboardCheckConfig.FractureClusterCraftMode, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Fracture Cluster";
         }
 
         if (string.Equals(_config.ClipboardCheck.CraftMode, ClipboardCheckConfig.FlaskAugmentCraftMode, StringComparison.OrdinalIgnoreCase))
@@ -1443,6 +1628,15 @@ public sealed class MainForm : Form
         _runStatusOverlay.UpdateProgress(progress.TotalClicks, progress.CompletedItems, progress.StuckItems);
     }
 
+    private bool IsCurrentRunFlaskPressMode()
+    {
+        lock (_sync)
+        {
+            return _currentRun is { IsCompleted: false }
+                   && string.Equals(_runningCraftMode, ClipboardCheckConfig.FlaskPressCraftMode, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     private bool HasThresholdRuleWithoutValue()
     {
         for (var i = 0; i < _matchRuleComboBoxes.Count && i < _matchRuleThresholdTextBoxes.Count; i++)
@@ -1482,6 +1676,25 @@ public sealed class MainForm : Form
     private static DelayRange CreateRange(NumericUpDown minInput, NumericUpDown maxInput)
     {
         return new DelayRange(Decimal.ToInt32(minInput.Value), Decimal.ToInt32(maxInput.Value));
+    }
+
+    private static void ConfigureFixedRows(TableLayoutPanel grid, int rowCount, int rowHeight)
+    {
+        grid.RowStyles.Clear();
+        for (var i = 0; i < rowCount; i++)
+        {
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, rowHeight));
+        }
+    }
+
+    private static void ConfigureAugmentRows(TableLayoutPanel grid)
+    {
+        grid.RowStyles.Clear();
+        grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        for (var i = 1; i < 9; i++)
+        {
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        }
     }
 
     private static void FreezeSectionLayout(GroupBox group, Control content, int height)
@@ -1545,33 +1758,39 @@ public sealed class MainForm : Form
         {
             var matchRuleIndex = startIndex + offset;
             var rule = _config.ClipboardCheck.MatchRules[matchRuleIndex];
-            grid.Controls.Add(new Label
-            {
-                Text = $"Aranan Mod {matchRuleIndex + 1}",
-                AutoSize = true,
-                Anchor = AnchorStyles.Left
-            }, 0, offset);
-
             var rulePanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 2,
+                ColumnCount = 3,
                 AutoSize = false,
-                Height = 30
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
             };
+            rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
             rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             rulePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+
+            rulePanel.Controls.Add(new Label
+            {
+                Text = $"Aranan Mod {matchRuleIndex + 1}",
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty
+            }, 0, 0);
 
             var ruleComboBox = new ComboBox
             {
                 Dock = DockStyle.Top,
-                DropDownStyle = ComboBoxStyle.DropDownList
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Margin = new Padding(0, 6, 6, 0)
             };
             var thresholdTextBox = new TextBox
             {
                 Dock = DockStyle.Top,
                 Width = 60,
-                Text = rule.ThresholdText
+                Text = rule.ThresholdText,
+                Margin = new Padding(6, 6, 0, 0)
             };
             thresholdTextBox.TextChanged += (_, _) => SaveUiToConfig();
             ruleComboBox.SelectedIndexChanged += (_, _) =>
@@ -1584,10 +1803,11 @@ public sealed class MainForm : Form
                 SaveUiToConfig();
             };
             _matchRuleComboBoxes.Add(ruleComboBox);
-            rulePanel.Controls.Add(ruleComboBox, 0, 0);
+            rulePanel.Controls.Add(ruleComboBox, 1, 0);
             _matchRuleThresholdTextBoxes.Add(thresholdTextBox);
-            rulePanel.Controls.Add(thresholdTextBox, 1, 0);
-            grid.Controls.Add(rulePanel, 1, offset);
+            rulePanel.Controls.Add(thresholdTextBox, 2, 0);
+            grid.Controls.Add(rulePanel, 0, offset);
+            grid.SetColumnSpan(rulePanel, 2);
         }
     }
 
@@ -1597,13 +1817,6 @@ public sealed class MainForm : Form
         {
             var matchRuleIndex = startIndex + offset;
             var row = rowOffset + offset;
-            grid.Controls.Add(new Label
-            {
-                Text = $"Augment Mod {matchRuleIndex + 1}",
-                AutoSize = true,
-                Anchor = AnchorStyles.Left
-            }, 0, row);
-
             var comboBox = new ComboBox
             {
                 Dock = DockStyle.Top,
@@ -1612,19 +1825,31 @@ public sealed class MainForm : Form
             var rowPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 2,
+                ColumnCount = 3,
                 AutoSize = false,
-                Height = 30
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
             };
+            rowPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
             rowPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             rowPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
-            rowPanel.Controls.Add(comboBox, 0, 0);
+            rowPanel.Controls.Add(new Label
+            {
+                Text = $"Augment Mod {matchRuleIndex + 1}",
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty
+            }, 0, 0);
+            comboBox.Margin = new Padding(0, 6, 6, 0);
+            rowPanel.Controls.Add(comboBox, 1, 0);
 
             var thresholdTextBox = new TextBox
             {
                 Dock = DockStyle.Top,
                 Width = 60,
-                Text = _config.ClipboardCheck.AugmentMatchRules[matchRuleIndex].ThresholdText
+                Text = _config.ClipboardCheck.AugmentMatchRules[matchRuleIndex].ThresholdText,
+                Margin = new Padding(6, 6, 0, 0)
             };
             thresholdTextBox.TextChanged += (_, _) => SaveUiToConfig();
             comboBox.SelectedIndexChanged += (_, _) =>
@@ -1638,9 +1863,10 @@ public sealed class MainForm : Form
             };
             _augmentRuleComboBoxes.Add(comboBox);
             _augmentRuleThresholdTextBoxes.Add(thresholdTextBox);
-            rowPanel.Controls.Add(thresholdTextBox, 1, 0);
+            rowPanel.Controls.Add(thresholdTextBox, 2, 0);
 
-            grid.Controls.Add(rowPanel, 1, row);
+            grid.Controls.Add(rowPanel, 0, row);
+            grid.SetColumnSpan(rowPanel, 2);
         }
     }
 

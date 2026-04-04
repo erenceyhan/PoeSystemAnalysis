@@ -76,6 +76,13 @@ public static class InputController
         }
     }
 
+    public static void PressKey(ushort virtualKey, int holdMs)
+    {
+        KeyDown(virtualKey);
+        Thread.Sleep(Math.Max(0, holdMs));
+        KeyUp(virtualKey);
+    }
+
     public static void ReleaseCommonModifiers()
     {
         // Release the most common modifier keys defensively in case a run is

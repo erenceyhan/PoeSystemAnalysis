@@ -32,6 +32,7 @@ internal static class NativeMethods
     public const ushort VK_SHIFT = 0x10;
     public const ushort VK_MENU = 0x12;
     public const ushort VK_C = 0x43;
+    public const ushort VK_1 = 0x31;
     public const ushort VK_F8 = 0x77;
     public const ushort VK_F9 = 0x78;
     public const ushort VK_F10 = 0x79;

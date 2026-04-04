@@ -1,118 +1,280 @@
 # SystemAnalysis
 
-SystemAnalysis, ekrandaki belirli noktalara tiklayip item metnini `Ctrl+C` ile okuyarak craft akislarini kontrollu sekilde yoneten Windows Forms uygulamasidir.
+SystemAnalysis, Windows uzerinde ekran koordinatlari, klavye tuslari ve `Ctrl+C` ile alinan item metni uzerinden craft akislarini yoneten bir masaustu otomasyon uygulamasidir.
 
-## Neler Yapabilir
+Bu surumde:
 
-- Bir veya iki currency noktasi ile calisir
-- Birden fazla item noktasi tanimlayabilir
-- Her tiklamadan sonra itemi ayni noktada kontrol eder
-- Itemlar arasinda tur mantigiyla doner
-- Tamamlanan itemlari hem mantiksal listeden hem UI listesinden kaldirir
-- Ekranda ustte kalan canli durum penceresi gosterir
-- Loglari hem ekranda hem `.txt` dosyasinda tutar
-- Kullanici fare/klavye ile mudahale ederse otomatik durur
+- arka plandaki otomasyon mantigi korunur
+- arayuz `WPF` ile calisir
+- gunluk kullanim icin sade release klasoru `publish/win-x64/` altindadir
 
-## Calisma Akislari
+## Teknoloji
 
-Program iki ana akis destekler:
+- Dil: `C#`
+- Platform: `.NET 10`
+- Arayuz: `WPF`
+- Windows entegrasyonu: `Win32 API`
+- Clipboard kontrolu: `Ctrl+C` veya `Ctrl+Alt+C`
 
-- `Sadece Alteration`
-- `Alteration + Augment`
+## Uygulamanin Temel Mantigi
 
-### Sadece Alteration
+Program genel olarak su sekilde calisir:
 
-Her item icin:
+1. secili currency noktasina gider
+2. item noktasina tiklar
+3. item metnini kopyalayip kontrol eder
+4. secili craft moduna gore devam eder veya itemi tamamlar
+5. birden fazla item varsa tur mantigiyla itemlar arasinda doner
 
-1. `Alteration` noktasina sag tik yapar
-2. `Shift` basili tutar
-3. iteme sol tik atar
-4. ayni item ustunde `Ctrl+C` ile kontrol eder
-5. `Aranan Mod` kutularindan biri gelirse item tamamlanir
+## Craft Modlari
 
-### Alteration + Augment
+`Craft Modu` alaninda 5 mod vardir.
 
-Her item icin:
+### 1 Mod Alteration
 
-1. Once alteration asamasi calisir
-2. `Craft Ayarlari 1-2` secimlerinden biri gelene kadar alteration denenir
-3. Hedef mod bulununca `Augment` noktasina bir kez sag tik yapar
-4. iteme bir kez sol tik yapar
-5. tekrar kontrol eder
-6. Hem alteration tarafindaki modlardan biri, hem de `Augment` sekmesindeki modlardan biri varsa item tamamlanir
-7. Yoksa alteration dongusu basa doner
+- sadece alteration kullanir
+- craft listesinde secili modlardan herhangi biri gelene kadar devam eder
+- mod bulundugunda item tamamlanir
+- augment kullanmaz
 
-## Item Tur Limiti
+### Flask Modu
 
-`Item Tur Limiti` alani bir itemin tek turda en fazla kac sol tik alacagini belirler.
+- once alteration ile `Craft Ayarlari 1-2` icindeki hedeflerden biri aranir
+- ilk hedef geldikten sonra bir kez augment uygulanir
+- son kontrolde:
+  - craft modlarindan en az biri
+  - augment modlarindan en az biri
+  birlikte varsa item tamamlanir
+- yoksa alteration dongusu bastan baslar
 
-Ornek:
+### 2 Mod Alteration + Augment
 
-- deger `300` ise bir item tek turda en fazla `300` sol tik alir
-- tamamlanmazsa siradaki itema gecer
-- tur sonuna gelindiginde tamamlanmayan itemlarla basa donulur
+- alteration asamasinda craft ve augment listelerinin birlesimi aranir
+- secili hedeflerden biri gelince augment asamasina gecer
+- augment sonrasi itemde secili hedeflerden toplam en az `2 farkli mod` bulunmalidir
+- 2 farkli hedef mod yoksa alteration dongusu basa doner
 
-Bu sayede tek itemda takilip kalinmaz.
+Bu mod genelde su senaryo icin kullanilir:
 
-## Mod ve Esik Mantigi
+- ilk mod alteration ile gelir
+- ikinci mod augment ile gelir
+- iki hedef de tamamlandiginda item biter
 
-### Aranan Modlar
+### Fracture Cluster
 
-- `Craft Ayarlari 1`: `Aranan Mod 1-7`
-- `Craft Ayarlari 2`: `Aranan Mod 8-15`
-- `Augment`: `Augment Mod 1-8`
+Bu modun akisi ozeldir:
 
-Her satirda:
+1. alteration noktasina sag tik
+2. `Shift` basili tutulur
+3. iteme bir kez sol tik
+4. `Shift` basiliyken `Alt` tusu da basilir
+5. iteme bir kez daha sol tik
+6. `Alt` birakilir
+7. item `Ctrl+C` ile kontrol edilir
+8. hedef mod bulunmadiysa `Shift` basili kalirken dongu devam eder
 
-- bir `combobox`
-- o satira ait bir esik kutusu
+Bu mod icin zamanlama sekmesinde ayri `Shift+Alt` araligi vardir.
 
-### Esik Kurali
+### Flask Basma Modu
 
-- Mod metninde `#` varsa, o satirin yanindaki esik kutusu kullanilir
-- Mod metninde `#` yoksa, yanindaki kutu dikkate alinmaz
-- Kural `>=` seklindedir
+Bu mod digerlerinden tamamen ayri calisir.
+
+- mouse koordinati kullanmaz
+- item kontrol etmez
+- log yazmaz
+- ustte kalan durum penceresi gostermez
+- otomatik fare/klavye mudahalesi ile durmaz
+- `F8` ile baslar
+- tekrar `F8` ile durur
+
+Yaptigi tek sey:
+
+1. `Flask Basma Modu` zamanina gore beklemek
+2. klavyedeki `1` tusuna insan gibi kisa sure basmak
+3. tekrar beklemek
+4. sen `F8` ile durdurana kadar devam etmek
+
+Zaman hesabı:
+
+- `Sabit`
+- `Ek Min`
+- `Ek Max`
+
+Toplam bekleme:
+
+- `Sabit + rastgele(Ek Min..Ek Max)`
+
+Tus basili kalma suresi:
+
+- dahili olarak `60-100 ms`
+
+## Mod Esik Mantigi
+
+Her `Aranan Mod` ve `Augment Mod` satirinin kendi esik kutusu vardir.
+
+Kural:
+
+- mod metninde `#` varsa, yanindaki esik kullanilir
+- mod metninde `#` yoksa, esik kutusu yok sayilir
+- eslesme mantigi `>=` seklindedir
 
 Ornek:
 
 - mod: `#% increased Evasion Rating during Effect`
 - esik: `55`
 
-Kabul edilen degerler:
+Kabul edilir:
 
 - `55% ...`
 - `56% ...`
 - `60% ...`
 
-### Guvenlik Kurali
+Kabul edilmez:
 
-Eger secili bir modda `#` varsa ama o satirin esik kutusu bossa:
+- `54% ...`
 
-- `F8` ile baslatamazsin
-- loga hata yazilir
-- kisa bir uyari sesi calar
+### Guvenlik Kontrolu
 
-### Secim Degisince Ne Olur
+Eger secili bir modda `#` varsa ama yanindaki esik bos ise:
 
-Bir mod secimi degistiginde:
+- `F8` ile baslatmaz
+- loga hata yazar
+- kisa uyari sesi calar
 
-- o satirin esik kutusu otomatik temizlenir
+### Mod Degisince
 
-Boylece eski bir sayi unutulup yanlis eslesme yaratmaz.
+Bir combobox secimi degistiginde:
+
+- yanindaki esik kutusu otomatik temizlenir
+
+Bu, eski sayinin unutulup hatali eslesme yaratmasini engeller.
+
+## Item Dongusu ve Tur Mantigi
+
+Program birden fazla item noktasi ile calisabilir.
+
+- `F7` ile her basista yeni item noktasi eklenir
+- itemlar sirayla islenir
+- tek itemda sonsuza kadar takilmaz
+
+`Item Tur Limiti`:
+
+- bir itemin tek turda kac kez denenebilecegini belirler
+- limit dolarsa siradaki iteme gecer
+- tur bitince tamamlanmayan itemlarla basa doner
+
+## Alteration Noktasi Limiti
+
+Bir alteration noktasi icin maksimum kullanim:
+
+- `Alteration Nokta Limiti`
+
+Program:
+
+- `F6` ile birden fazla alteration noktasi alabilir
+- bir noktanin kullanim limiti dolarsa siradaki alteration noktasina gecer
+
+Ek stuck guvenligi:
+
+- ayni alteration noktasinda arka arkaya `2` item takilirse
+- o nokta bitmis kabul edilir
+- siradaki alteration noktasina gecilir
+
+## Stuck Algoritmasi
+
+Program ayni itemde ayni clipboard metni `3 kez` ust uste gorurse bunu stuck kabul eder.
+
+Bu durumda:
+
+1. item takildi olarak isaretlenir
+2. item konumuna gidilir
+3. `Ctrl` basili halde `3` kez sol tik yapilir
+4. item stash'e gonderilmeye zorlanir
+5. item UI listesinden kaldirilir
+6. siradaki iteme gecilir
+
+Bu adim:
+
+- normal craft sayacina eklenmez
+- tamamlanan item ile ayni statude sayilmaz
+- ozet logda ayri gorunur
+
+## Tamamlanan Itemin Stashe Gonderilmesi
+
+`Tamamlanan itemi Ctrl ile stashe gonder` kutusu vardir.
+
+Aciksa:
+
+- item tamamlandiginda `Ctrl + sol tik` ile stash'e gonderilir
+
+Kapaliysa:
+
+- item tamamlanir
+- listeden duser
+- ama yerinde birakilir
+
+Not:
+
+- stuck item stash'e gonderme davranisi her durumda ayri guvenlik adimi olarak calisir
+
+## Ustte Kalan Durum Penceresi
+
+Craft modlari calisirken ustte kalan kucuk bir pencere acilir.
+
+Bu pencere su sayaclari gosterir:
+
+- `Sol Tik`
+- `Tamamlanan Item`
+- `Takilan Item`
+
+Bu pencere:
+
+- ana pencere arkada kalsa bile gorunur
+- craft biterse veya durursa kapanir
+- `Flask Basma Modu`nda hic acilmaz
+
+## Loglama
+
+Normal craft modlarinda:
+
+- ekrandaki log dolu kalir
+- secili log klasorunde zaman damgali `.txt` dosyasi olusur
+- istersen `Kopyalanan metni logla` ile clipboard metnini de loga eklersin
+
+Loglarda gorulebilen seyler:
+
+- secilen craft modu
+- item dongusu
+- secilen alteration noktasi
+- secilen bekleme sureleri
+- eslesmeler
+- tur limiti bilgisi
+- stuck algilama
+- stash gonderimi
+- item bazli ozet
+- genel toplam
+
+`Flask Basma Modu`nda:
+
+- performans icin log yazilmaz
 
 ## Arayuz Sekmeleri
 
 ### Craft Ayarlari 1
 
 - `Aranan Mod 1-7`
-- `Item Tur Limiti`
-- `Augment Akisi`
-- `Log Klasoru`
-- `Kopyala Goster`
 
 ### Craft Ayarlari 2
 
 - `Aranan Mod 8-15`
+
+### Craft Modlari
+
+- `Item Tur Limiti`
+- `Alteration Nokta Limiti`
+- `Craft Modu`
+- `Tamamlanan itemi Ctrl ile stashe gonder`
+- `Log Klasoru`
 
 ### Augment
 
@@ -120,177 +282,213 @@ Boylece eski bir sayi unutulup yanlis eslesme yaratmaz.
 
 ### Zamanlama
 
-Tum beklemeler `Min/Max` araliginda rastgele secilir:
+Beklemeler rastgele araliklardan secilir:
 
 - `Baslamadan Once`
 - `Aksiyon Arasi`
 - `Craft Sonrasi`
+- `Shift+Alt`
 - `Inspect Oncesi`
 - `Kisayol Sonrasi`
+- `Flask Basma Modu`
+  - `Sabit`
+  - `Ek Min`
+  - `Ek Max`
 
 ### Noktalar
 
-- `F6` currency noktalarini sirayla kaydeder
-  - ilk `F6`: `Alteration`
-  - ikinci `F6`: `Augment`
-  - sonra tekrar basa doner
-- `F7` her basista yeni item noktasi ekler
-- `Currencyleri Sifirla`
-- `Sonuncuyu Sil`
-- `Listeyi Temizle`
+- `F6`: alteration noktasi ekler
+- `F10`: augment noktasini kaydeder
+- `F7`: item noktasi ekler
+- alteration listesi
+- augment noktasi
+- item noktasi listesi
 
 Not:
 
-- item noktalarini oturumluk tutar
-- program kapaninca item noktasi listesi sifirlanir
-- diger ayarlar kalici kaydedilir
+- item noktalari oturumluktur
+- program kapaninca item listesi sifirlanir
+- diger ayarlar kalicidir
 
 ### Kayitli Modlar
 
-Buraya eklenen modlar kalici olarak saklanir ve tum secim kutularinda gorunur.
+- yeni mod ekleme
+- secileni silme
+- hepsini temizleme
+- tum combobox listelerini bu kayitli modlar besler
 
-## Alt Butonlar
+## Alt Kontroller
 
 - `Baslat (F8)`
 - `Durdur (F9)`
 - `Temizle`
 - `Kapat`
+- `Kopyalanan metni logla`
 
-`Temizle` sunlari yapar:
+`Temizle`:
 
-- tum `Aranan Mod` secimlerini bosaltir
-- tum `Augment Mod` secimlerini bosaltir
-- tum esik kutularini temizler
+- craft mod secimlerini bosaltir
+- augment mod secimlerini bosaltir
+- esik kutularini bosaltir
 
 Ama sunlara dokunmaz:
 
 - kayitli mod listesi
-- currency noktalari
-- kalici ayarlar
+- alteration noktalari
+- augment noktasi
+- genel kalici ayarlar
 
-## Kisa Yol Tuslari
+## Klavye Kisayollari
 
-- `F6`: currency noktalarini sirayla kaydet
+Genel modlarda:
+
+- `F6`: alteration noktasi ekle
 - `F7`: item noktasi ekle
 - `F8`: baslat
 - `F9`: durdur
+- `F10`: augment noktasi kaydet
 - `Esc`: aktif islemi durdur
 
-Program calisirken:
+Normal craft modlari calisirken:
 
-- fareyi hareket ettirirsen
-- fare ile tiklarsan
-- klavyede tusa basarsan
+- fare hareketi
+- fare tiki
+- klavye tusu
 
-otomatik durur.
+islemi otomatik durdurur.
 
-## Ustte Kalan Durum Penceresi
+`Flask Basma Modu` istisnadir:
 
-`F8` ile calisma basladiginda ayri bir kucuk pencere acilir.
+- mouse/klavye mudahalesi ile durmaz
+- tekrar `F8` ile durdurulur
 
-Bu pencere:
+## Ayar Dosyalari
 
-- her seyin ustunde kalir
-- sag ust tarafta gorunur
-- iki buyuk sayi gosterir:
-  - `Sol Tik`
-  - `Tamamlanan Item`
+Guncel kullanilan ayar dosyasi:
 
-Boylece ana pencere arkada kalsa bile kac tik atildigini ve kac itemin bittigini gorebilirsin.
+```text
+C:\Users\gamer\Desktop\crafter\publish\win-x64\user-settings.json
+```
 
-Islem bitince veya durunca bu pencere kapanir.
+Varsayilan sablon dosyasi:
 
-## Loglama ve Uyari
+```text
+C:\Users\gamer\Desktop\crafter\publish\win-x64\appsettings.json
+```
 
-- `F8` ile her calistirmada secili klasorde tarih-saat adli yeni bir `.txt` log dosyasi olusur
-- ekrandaki loglar ayni anda bu dosyaya da yazilir
-- `Kopyala Goster` aciksa clipboard'a gelen metinler de loga yazilir
-- baslatma oncesi hata varsa kisa bir uyari sesi calar
-- her item icin alteration, augment, toplam sol tik ve sure ozetlenir
-- tum islem sonunda genel ozet yazilir
+Mantik:
 
-Loglarda gorulebilecek onemli satirlar:
+- program once `user-settings.json` kullanir
+- yoksa `appsettings.json` kopyalanir
+- eski LocalAppData ayari varsa oradan da tasiyabilir
 
-- hangi akisin calistigi
-- hangi itemda olundugu
-- secilen bekleme suresi
-- bulunan eslesmeler
-- tur limiti doldu bilgisi
-- tamamlanan itemin listeden kaldirildigi bilgisi
+Bu sayede:
 
-## Ayarlarin Kaydi
+- ayarlarini GitHub'a koyabilirsin
+- baska bilgisayara tasiyabilirsin
+- publish klasorunu yedekleyebilirsin
 
-Kalici olarak saklananlar:
+## Hangi Bilgiler Kalici
 
-- secili `Aranan Mod` kutulari
-- secili `Augment Mod` kutulari
-- satir bazli esik kutulari
-- `Item Tur Limiti`
-- `Augment Akisi`
+Kalici olanlar:
+
+- craft modu secimi
+- craft mod hedefleri
+- augment hedefleri
+- tum esik kutulari
 - zamanlama degerleri
-- `Log Klasoru`
-- `Kopyala Goster`
-- currency noktalari
+- alteration noktalari
+- augment noktasi
+- log klasoru
+- `Kopyalanan metni logla`
+- `Tamamlanan itemi Ctrl ile stashe gonder`
 - kayitli mod listesi
+- `Item Tur Limiti`
+- `Alteration Nokta Limiti`
 
 Kalici olmayan:
 
 - item noktasi listesi
 
-## Dogru Kullanim Icin Notlar
+## Klasor Duzeni
 
-- `Ctrl+C` ile item bilgisinin gercekten panoya geldigini once manuel denemek iyi olur
-- item penceresi veya oyun arayuzu yer degistirirse koordinatlari yeniden kaydetmek gerekir
-- bos mod kutulari tamamen yok sayilir
-- item tamamlandiginda UI listesinden de silinir
+Kaynak kod:
+
+```text
+C:\Users\gamer\Desktop\crafter\SystemAnalysis
+```
+
+Kullanilacak sade release klasoru:
+
+```text
+C:\Users\gamer\Desktop\crafter\publish\win-x64
+```
+
+Calistirilacak exe:
+
+```text
+C:\Users\gamer\Desktop\crafter\publish\win-x64\SystemAnalysis.exe
+```
+
+`bin/` ve `obj/` klasorleri:
+
+- gecici build klasorleridir
+- gunluk kullanim icin gerekli degildir
 
 ## Debug'da Calistirma
 
 ```powershell
-cd C:\Users\gamer\Desktop\crafter\SystemAnalysis
+cd C:\Users\gamer\Desktop\crafter
 $env:DOTNET_CLI_HOME='C:\Users\gamer\Desktop\crafter\.dotnet-home'
-dotnet build
-.\bin\Debug\net10.0-windows\SystemAnalysis.exe
-```
-
-Dogrudan debug exe acmak icin:
-
-```powershell
+dotnet build .\SystemAnalysis\SystemAnalysis.csproj
 & "C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Debug\net10.0-windows\SystemAnalysis.exe"
 ```
 
 ## Release Publish Alma
 
+Sade release klasorune publish almak icin:
+
 ```powershell
 cd C:\Users\gamer\Desktop\crafter
 $env:DOTNET_CLI_HOME='C:\Users\gamer\Desktop\crafter\.dotnet-home'
-dotnet restore .\SystemAnalysis\SystemAnalysis.csproj -r win-x64
-dotnet publish .\SystemAnalysis\SystemAnalysis.csproj -c Release -r win-x64 --self-contained true
+dotnet publish .\SystemAnalysis\SystemAnalysis.csproj -c Release -r win-x64 --self-contained true -o .\publish\win-x64
 ```
 
-Olusan exe:
-
-```text
-C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Release\net10.0-windows\win-x64\publish\SystemAnalysis.exe
-```
-
-Release exe acmak icin:
+Sonra dogrudan bunu calistir:
 
 ```powershell
-& "C:\Users\gamer\Desktop\crafter\SystemAnalysis\bin\Release\net10.0-windows\win-x64\publish\SystemAnalysis.exe"
+& "C:\Users\gamer\Desktop\crafter\publish\win-x64\SystemAnalysis.exe"
 ```
 
-## Repo Duzeni
+## Git ve Push Hakkinda
 
-- kaynak kodlar: `SystemAnalysis/`
-- guncel publish kopyasi: `publish/win-x64/`
-- debug/release build klasorleri: `bin/`, `obj/`
+Repoya genelde su gruplar gider:
 
-## Hatirlatma
+- kaynak kodlar `SystemAnalysis/`
+- sade release kopyasi `publish/win-x64/`
+- istersen `user-settings.json`
 
-Projeye geri dondugunde en hizli baslangic genelde su olur:
+Repoya gitmeyenler:
 
-1. debug test icin `dotnet build` + debug exe
-2. son kullanilan ayarlari kontrol et
-3. item noktalarini yeniden sec
-4. gerekirse release publish al
+- `bin/`
+- `obj/`
+
+Bu sayede:
+
+- kaynak kodu cekip yeniden build alabilirsin
+- ister sadece publish klasorunu kullanabilirsin
+- istersen kullanilan ayar dosyasini da birlikte tasiyabilirsin
+
+## Pratik Kullanim Onerisi
+
+Geri dondugunde en rahat akis genelde su olur:
+
+1. `publish/win-x64/SystemAnalysis.exe` ac
+2. craft modunu kontrol et
+3. gerekiyorsa item noktalarini yeniden sec
+4. log klasoru ve mod secimlerini gozden gecir
+5. `F8` ile baslat
+
+## Not
+
+Bu branch'te arayuz `WPF`'ye gecirilmis durumdadir. Arka plandaki otomasyon mantigi korunur; hedef, sadece UI tarafini daha hizli ve daha bakimi kolay hale getirmektir.

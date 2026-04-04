@@ -78,7 +78,9 @@ public sealed class AnalysisRunner
                     ItemRunOutcome outcome;
                     try
                     {
-                        outcome = _config.ClipboardCheck.UseItemAugmentCycle
+                        outcome = string.Equals(_config.ClipboardCheck.CraftMode, ClipboardCheckConfig.FractureClusterCraftMode, StringComparison.OrdinalIgnoreCase)
+                            ? await RunFractureClusterForItemAsync(item, maxClicksPerRound, cancellationToken)
+                            : _config.ClipboardCheck.UseItemAugmentCycle
                             ? await RunItemAugmentCycleForItemAsync(item, maxClicksPerRound, cancellationToken)
                             : _config.ClipboardCheck.UseAugmentCycle
                                 ? await RunAlterationAugmentCycleForItemAsync(item, maxClicksPerRound, cancellationToken)
@@ -94,7 +96,14 @@ public sealed class AnalysisRunner
                     if (outcome == ItemRunOutcome.Completed)
                     {
                         item.Completed = true;
-                        await SendCompletedItemToStashAsync(item, cancellationToken);
+                        if (_config.StashCompletedItems)
+                        {
+                            await SendCompletedItemToStashAsync(item, cancellationToken);
+                        }
+                        else
+                        {
+                            Log($"Item {item.Index}: Tamamlandi. Stash gonderimi kapali oldugu icin item yerinde birakiliyor.");
+                        }
                         pendingItems.Remove(item);
                         _itemCompleted?.Invoke(item.Point);
                         ReportProgress();
@@ -200,6 +209,95 @@ public sealed class AnalysisRunner
                     if (inspection.HasDesiredMod)
                     {
                         Log($"Item {item.Index}: Hedef mod bulundu.");
+                        return ItemRunOutcome.Completed;
+                    }
+                }
+            }
+            finally
+            {
+                if (shiftHeld)
+                {
+                    InputController.KeyUp(NativeMethods.VK_SHIFT);
+                    Log($"Item {item.Index}: Shift tusu birakildi.");
+                }
+            }
+        }
+
+        return ItemRunOutcome.ContinueNextRound;
+    }
+
+    private async Task<ItemRunOutcome> RunFractureClusterForItemAsync(ItemRunSummary item, int maxClicksThisRound, CancellationToken cancellationToken)
+    {
+        item.LastRoundClicks = 0;
+
+        while (!cancellationToken.IsCancellationRequested && item.LastRoundClicks < maxClicksThisRound)
+        {
+            var alterationPoint = GetAvailableAlterationPoint(item.Index);
+            if (alterationPoint is null)
+            {
+                return ItemRunOutcome.ContinueNextRound;
+            }
+
+            item.LastAlterationPointIndex = alterationPoint.Index;
+
+            var shiftHeld = false;
+            try
+            {
+                Log($"Item {item.Index}: Fracture Cluster icin alteration noktasi {alterationPoint.Index} secildi, sag tik yapiliyor.");
+                RightClick(alterationPoint.Point);
+                await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+
+                Log($"Item {item.Index}: Shift tusu basili tutuluyor.");
+                InputController.KeyDown(NativeMethods.VK_SHIFT);
+                shiftHeld = true;
+                await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+
+                while (!cancellationToken.IsCancellationRequested && item.LastRoundClicks < maxClicksThisRound)
+                {
+                    if (alterationPoint.Uses >= _config.MaxAlterationsPerSourcePoint)
+                    {
+                        Log($"Item {item.Index}: Alteration noktasi {alterationPoint.Index} limitine ulasti. Yeni noktaya gecilecek.");
+                        break;
+                    }
+
+                    Log($"Item {item.Index}: Fracture Cluster icin Shift basili sol tik yapiliyor.");
+                    LeftClick(item.Point);
+                    item.AlterationUses++;
+                    item.TotalItemClicks++;
+                    item.LastRoundClicks++;
+                    alterationPoint.Uses++;
+                    ReportProgress();
+                    await Delay(_config.Timing.DelayAfterCraftMs, cancellationToken, "Craft Sonrasi");
+
+                    Log($"Item {item.Index}: Shift basiliyken Alt tusu basiliyor.");
+                    InputController.KeyDown(NativeMethods.VK_MENU);
+
+                    try
+                    {
+                        await Delay(_config.Timing.DelayShiftAltMs, cancellationToken, "Shift+Alt");
+                        Log($"Item {item.Index}: Shift+Alt basili ikinci sol tik yapiliyor.");
+                        LeftClick(item.Point);
+                    }
+                    finally
+                    {
+                        InputController.KeyUp(NativeMethods.VK_MENU);
+                        Log($"Item {item.Index}: Alt tusu birakildi.");
+                    }
+
+                    item.TotalItemClicks++;
+                    ReportProgress();
+                    await Delay(_config.Timing.DelayBetweenActionsMs, cancellationToken, "Aksiyon Arasi");
+
+                    var inspection = await InspectAsync(item, cancellationToken);
+                    if (inspection.IsStuck)
+                    {
+                        item.LastStuckDuringAlteration = true;
+                        return ItemRunOutcome.StashedAsStuck;
+                    }
+
+                    if (inspection.HasDesiredMod)
+                    {
+                        Log($"Item {item.Index}: Fracture Cluster hedef modu bulundu.");
                         return ItemRunOutcome.Completed;
                     }
                 }
@@ -694,6 +792,13 @@ public sealed class AnalysisRunner
         InputController.MoveMouse(point.X, point.Y);
         Thread.Sleep(50);
         InputController.LeftClick();
+    }
+
+    private static void ModifiedLeftClick(PointConfig point, params ushort[] modifierKeys)
+    {
+        InputController.MoveMouse(point.X, point.Y);
+        Thread.Sleep(50);
+        InputController.ModifiedLeftClick(modifierKeys);
     }
 
     private Task Delay(DelayRange range, CancellationToken cancellationToken, string label)

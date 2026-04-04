@@ -1,0 +1,228 @@
+{
+  "Mode": "hold_shift_spam",
+  "MaxClicksPerItemRound": 2500,
+  "MaxAlterationsPerSourcePoint": 2500,
+  "SourcePoint": {
+    "X": 111,
+    "Y": 279
+  },
+  "AlterationPoints": [
+    {
+      "X": 111,
+      "Y": 279
+    }
+  ],
+  "SecondarySourcePoint": {
+    "X": 0,
+    "Y": 0
+  },
+  "TargetPoint": {
+    "X": 0,
+    "Y": 0
+  },
+  "InspectPoint": {
+    "X": 0,
+    "Y": 0
+  },
+  "SavedMods": [
+    "# Lightning Damage",
+    "# to maximum Mana",
+    "#% Chance to Avoid being Shocked during Effect",
+    "#% Chance to Avoid being Stunned during Effect",
+    "#% increased Critical Strike Chance during Effect",
+    "#% reduced Effect of Curses on you during Effect",
+    "\u002B#% to Damage over Time Multiplier",
+    "\u002B2 to Level of all Minion Skill Gems",
+    "14% increased Movement Speed during Effect",
+    "19% increased Attack Speed",
+    "20% additional Elemental Resistances during Effect",
+    "25% increased effect",
+    "28% reduced Charges per use",
+    "3% increased Area of Effect per 50 Strength",
+    "60% increased Armour during Effect",
+    "60% increased Evasion Rating during Effect",
+    "Added Small Passive Skills also grant: \u002B# to Maximum Life",
+    "Added Small Passive Skills also grant: 3% increased Attack and Cast Speed with Fire Skills",
+    "Added Small Passive Skills also grant: 3% increased Attack and Cast Speed with Lightning Skills",
+    "Added Small Passive Skills have 35% increased Effect",
+    "Minions have 3% increased Attack and Cast Speed",
+    "Socketed Gems are supported by Level 20 Elemental Damage with Attacks",
+    "Socketed Gems are Supported by Level 20 Faster Attacks",
+    "Socketed Gems are Supported by Level 20 Increased Critical Strikes",
+    "Socketed Skills deal 40% more Attack Damage"
+  ],
+  "ClipboardCheck": {
+    "TriggerShortcut": "ctrl\u002Bc",
+    "MustContain": "Minions have 3% increased Attack and Cast Speed",
+    "CaseSensitive": false,
+    "CraftMode": "flask_press",
+    "UseAugmentCycle": false,
+    "UseItemAugmentCycle": false,
+    "PercentageThresholdText": "53",
+    "MatchRules": [
+      {
+        "Enabled": true,
+        "Text": "Minions have 3% increased Attack and Cast Speed",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      }
+    ],
+    "AugmentMatchRules": [
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      },
+      {
+        "Enabled": false,
+        "Text": "",
+        "ThresholdText": ""
+      }
+    ]
+  },
+  "Timing": {
+    "DelayBeforeStartMs": {
+      "Min": 3000,
+      "Max": 3000
+    },
+    "DelayBetweenActionsMs": {
+      "Min": 90,
+      "Max": 140
+    },
+    "DelayAfterCraftMs": {
+      "Min": 160,
+      "Max": 220
+    },
+    "DelayShiftAltMs": {
+      "Min": 120,
+      "Max": 200
+    },
+    "DelayBeforeInspectMs": {
+      "Min": 110,
+      "Max": 170
+    },
+    "DelayAfterInspectShortcutMs": {
+      "Min": 140,
+      "Max": 190
+    },
+    "DelayFlaskPressBaseMs": 3000,
+    "DelayFlaskPressExtraMs": {
+      "Min": 50,
+      "Max": 250
+    },
+    "DelayBeforeStart": null,
+    "DelayBetweenActions": null,
+    "DelayAfterCraft": null,
+    "DelayShiftAlt": null,
+    "DelayBeforeInspect": null,
+    "DelayAfterInspectShortcut": null,
+    "DelayFlaskPressBase": null
+  },
+  "Safety": {
+    "MouseMoveTolerancePx": 4
+  },
+  "Logging": {
+    "DirectoryPath": "C:\\Users\\gamer\\Desktop\\bot log",
+    "ShowCopiedText": false
+  },
+  "StashCompletedItems": false
+}
